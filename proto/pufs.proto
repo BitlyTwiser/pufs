@@ -5,18 +5,47 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/BitlyTwiser/pufs-server/proto";
 
 service IpfsFileSystem {
-  rpc GetFiles(FilesRequest) returns (FilesResponse) {}
+  rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse) {}
+  rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse) {}
+  //Create stream: Files are streamed back to client instead of being sent once.
+  //Note: These are not actually files, these are just placeholders for visual aid.
+  // User will have to actually request a file be downloaded.
+  rpc ListFiles(FilesRequest) returns (stream FilesResponse) {}
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
 }
 
-message DeleteFileRequest {}
-message DeleteFileResponse {}
-
-message FilesRequest {
-  
+message UploadFileRequest {
+  bytes file_data = 1;
 }
 
+message UploadFileResponse {
+  bool sucessful = 1;
+}
+
+message DownloadFileRequest {
+  string file_name = 1;
+}
+
+message DownloadFileResponse {
+  bytes file_data = 1;
+}
+
+message DeleteFileRequest {
+  string file_name = 1;
+}
+message DeleteFileResponse {
+  bool successful = 1;
+}
+
+message FilesRequest {}
+
+//Packed?
+// Multiples files
 message FilesResponse {
+  repeated File files = 1;
+}
+
+message File {
   string filename = 1;
   int64 file_size = 2;
   string ipfs_hash = 3;

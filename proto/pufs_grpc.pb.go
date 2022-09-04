@@ -22,7 +22,12 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type IpfsFileSystemClient interface {
-	GetFiles(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (*FilesResponse, error)
+	UploadFile(ctx context.Context, opts ...grpc.CallOption) (IpfsFileSystem_UploadFileClient, error)
+	DownloadFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (IpfsFileSystem_DownloadFileClient, error)
+	//Create stream: Files are streamed back to client instead of being sent once.
+	//Note: These are not actually files, these are just placeholders for visual aid.
+	// User will have to actually request a file be downloaded.
+	ListFiles(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (IpfsFileSystem_ListFilesClient, error)
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
 }
 
@@ -34,13 +39,102 @@ func NewIpfsFileSystemClient(cc grpc.ClientConnInterface) IpfsFileSystemClient {
 	return &ipfsFileSystemClient{cc}
 }
 
-func (c *ipfsFileSystemClient) GetFiles(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (*FilesResponse, error) {
-	out := new(FilesResponse)
-	err := c.cc.Invoke(ctx, "/pufs.IpfsFileSystem/GetFiles", in, out, opts...)
+func (c *ipfsFileSystemClient) UploadFile(ctx context.Context, opts ...grpc.CallOption) (IpfsFileSystem_UploadFileClient, error) {
+	stream, err := c.cc.NewStream(ctx, &IpfsFileSystem_ServiceDesc.Streams[0], "/pufs.IpfsFileSystem/UploadFile", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &ipfsFileSystemUploadFileClient{stream}
+	return x, nil
+}
+
+type IpfsFileSystem_UploadFileClient interface {
+	Send(*UploadFileRequest) error
+	CloseAndRecv() (*UploadFileResponse, error)
+	grpc.ClientStream
+}
+
+type ipfsFileSystemUploadFileClient struct {
+	grpc.ClientStream
+}
+
+func (x *ipfsFileSystemUploadFileClient) Send(m *UploadFileRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *ipfsFileSystemUploadFileClient) CloseAndRecv() (*UploadFileResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(UploadFileResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *ipfsFileSystemClient) DownloadFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (IpfsFileSystem_DownloadFileClient, error) {
+	stream, err := c.cc.NewStream(ctx, &IpfsFileSystem_ServiceDesc.Streams[1], "/pufs.IpfsFileSystem/DownloadFile", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &ipfsFileSystemDownloadFileClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type IpfsFileSystem_DownloadFileClient interface {
+	Recv() (*DownloadFileResponse, error)
+	grpc.ClientStream
+}
+
+type ipfsFileSystemDownloadFileClient struct {
+	grpc.ClientStream
+}
+
+func (x *ipfsFileSystemDownloadFileClient) Recv() (*DownloadFileResponse, error) {
+	m := new(DownloadFileResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *ipfsFileSystemClient) ListFiles(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (IpfsFileSystem_ListFilesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &IpfsFileSystem_ServiceDesc.Streams[2], "/pufs.IpfsFileSystem/ListFiles", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &ipfsFileSystemListFilesClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type IpfsFileSystem_ListFilesClient interface {
+	Recv() (*FilesResponse, error)
+	grpc.ClientStream
+}
+
+type ipfsFileSystemListFilesClient struct {
+	grpc.ClientStream
+}
+
+func (x *ipfsFileSystemListFilesClient) Recv() (*FilesResponse, error) {
+	m := new(FilesResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *ipfsFileSystemClient) DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error) {
@@ -56,7 +150,12 @@ func (c *ipfsFileSystemClient) DeleteFile(ctx context.Context, in *DeleteFileReq
 // All implementations must embed UnimplementedIpfsFileSystemServer
 // for forward compatibility
 type IpfsFileSystemServer interface {
-	GetFiles(context.Context, *FilesRequest) (*FilesResponse, error)
+	UploadFile(IpfsFileSystem_UploadFileServer) error
+	DownloadFile(*DownloadFileRequest, IpfsFileSystem_DownloadFileServer) error
+	//Create stream: Files are streamed back to client instead of being sent once.
+	//Note: These are not actually files, these are just placeholders for visual aid.
+	// User will have to actually request a file be downloaded.
+	ListFiles(*FilesRequest, IpfsFileSystem_ListFilesServer) error
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
 	mustEmbedUnimplementedIpfsFileSystemServer()
 }
@@ -65,8 +164,14 @@ type IpfsFileSystemServer interface {
 type UnimplementedIpfsFileSystemServer struct {
 }
 
-func (UnimplementedIpfsFileSystemServer) GetFiles(context.Context, *FilesRequest) (*FilesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetFiles not implemented")
+func (UnimplementedIpfsFileSystemServer) UploadFile(IpfsFileSystem_UploadFileServer) error {
+	return status.Errorf(codes.Unimplemented, "method UploadFile not implemented")
+}
+func (UnimplementedIpfsFileSystemServer) DownloadFile(*DownloadFileRequest, IpfsFileSystem_DownloadFileServer) error {
+	return status.Errorf(codes.Unimplemented, "method DownloadFile not implemented")
+}
+func (UnimplementedIpfsFileSystemServer) ListFiles(*FilesRequest, IpfsFileSystem_ListFilesServer) error {
+	return status.Errorf(codes.Unimplemented, "method ListFiles not implemented")
 }
 func (UnimplementedIpfsFileSystemServer) DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteFile not implemented")
@@ -84,22 +189,72 @@ func RegisterIpfsFileSystemServer(s grpc.ServiceRegistrar, srv IpfsFileSystemSer
 	s.RegisterService(&IpfsFileSystem_ServiceDesc, srv)
 }
 
-func _IpfsFileSystem_GetFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FilesRequest)
-	if err := dec(in); err != nil {
+func _IpfsFileSystem_UploadFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(IpfsFileSystemServer).UploadFile(&ipfsFileSystemUploadFileServer{stream})
+}
+
+type IpfsFileSystem_UploadFileServer interface {
+	SendAndClose(*UploadFileResponse) error
+	Recv() (*UploadFileRequest, error)
+	grpc.ServerStream
+}
+
+type ipfsFileSystemUploadFileServer struct {
+	grpc.ServerStream
+}
+
+func (x *ipfsFileSystemUploadFileServer) SendAndClose(m *UploadFileResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *ipfsFileSystemUploadFileServer) Recv() (*UploadFileRequest, error) {
+	m := new(UploadFileRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(IpfsFileSystemServer).GetFiles(ctx, in)
+	return m, nil
+}
+
+func _IpfsFileSystem_DownloadFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DownloadFileRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/pufs.IpfsFileSystem/GetFiles",
+	return srv.(IpfsFileSystemServer).DownloadFile(m, &ipfsFileSystemDownloadFileServer{stream})
+}
+
+type IpfsFileSystem_DownloadFileServer interface {
+	Send(*DownloadFileResponse) error
+	grpc.ServerStream
+}
+
+type ipfsFileSystemDownloadFileServer struct {
+	grpc.ServerStream
+}
+
+func (x *ipfsFileSystemDownloadFileServer) Send(m *DownloadFileResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _IpfsFileSystem_ListFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(FilesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IpfsFileSystemServer).GetFiles(ctx, req.(*FilesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(IpfsFileSystemServer).ListFiles(m, &ipfsFileSystemListFilesServer{stream})
+}
+
+type IpfsFileSystem_ListFilesServer interface {
+	Send(*FilesResponse) error
+	grpc.ServerStream
+}
+
+type ipfsFileSystemListFilesServer struct {
+	grpc.ServerStream
+}
+
+func (x *ipfsFileSystemListFilesServer) Send(m *FilesResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _IpfsFileSystem_DeleteFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -128,14 +283,26 @@ var IpfsFileSystem_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*IpfsFileSystemServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetFiles",
-			Handler:    _IpfsFileSystem_GetFiles_Handler,
-		},
-		{
 			MethodName: "DeleteFile",
 			Handler:    _IpfsFileSystem_DeleteFile_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "UploadFile",
+			Handler:       _IpfsFileSystem_UploadFile_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "DownloadFile",
+			Handler:       _IpfsFileSystem_DownloadFile_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ListFiles",
+			Handler:       _IpfsFileSystem_ListFiles_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "proto/pufs.proto",
 }
