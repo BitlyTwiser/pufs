@@ -1,0 +1,25 @@
+syntax = "proto3";
+package pufs;
+
+import "google/protobuf/timestamp.proto";
+option go_package = "github.com/BitlyTwiser/pufs-server/proto";
+
+service IpfsFileSystem {
+  rpc GetFiles(FilesRequest) returns (FilesResponse) {}
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
+}
+
+message DeleteFileRequest {}
+message DeleteFileResponse {}
+
+message FilesRequest {
+  
+}
+
+message FilesResponse {
+  string filename = 1;
+  int64 file_size = 2;
+  string ipfs_hash = 3;
+  google.protobuf.Timestamp uploaded_at = 4;
+}
+
