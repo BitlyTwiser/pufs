@@ -24,9 +24,6 @@ const _ = grpc.SupportPackageIsVersion7
 type IpfsFileSystemClient interface {
 	UploadFile(ctx context.Context, opts ...grpc.CallOption) (IpfsFileSystem_UploadFileClient, error)
 	DownloadFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (IpfsFileSystem_DownloadFileClient, error)
-	//Create stream: Files are streamed back to client instead of being sent once.
-	//Note: These are not actually files, these are just placeholders for visual aid.
-	// User will have to actually request a file be downloaded.
 	ListFiles(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (IpfsFileSystem_ListFilesClient, error)
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
 }
@@ -152,9 +149,6 @@ func (c *ipfsFileSystemClient) DeleteFile(ctx context.Context, in *DeleteFileReq
 type IpfsFileSystemServer interface {
 	UploadFile(IpfsFileSystem_UploadFileServer) error
 	DownloadFile(*DownloadFileRequest, IpfsFileSystem_DownloadFileServer) error
-	//Create stream: Files are streamed back to client instead of being sent once.
-	//Note: These are not actually files, these are just placeholders for visual aid.
-	// User will have to actually request a file be downloaded.
 	ListFiles(*FilesRequest, IpfsFileSystem_ListFilesServer) error
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
 	mustEmbedUnimplementedIpfsFileSystemServer()

@@ -1,17 +1,17 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"io"
-  "fmt"
 	"log"
 	"net"
 	"os"
 
-  
+	pufs_pb "github.com/pufs-server/proto"
 	"google.golang.org/grpc"
-  pufs_pb "github.com/pufs-server/proto"
-  //pufs_pb "github.com/BitlyTwiser/pufs-server/proto";
+	//pufs_pb "github.com/BitlyTwiser/pufs-server/proto";
 )
 
 var (
@@ -28,6 +28,22 @@ type IpfsServer struct {
   pufs_pb.UnimplementedIpfsFileSystemServer
 }
 
+func (ipfs *IpfsServer) UploadFile(steam pufs_pb.IpfsFileSystem_UploadFileServer) error {
+  return nil 
+}
+
+func (ipfs *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_pb.IpfsFileSystem_DownloadFileServer) error {
+  return nil 
+}
+
+func (ipfs *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesServer) error {
+  return nil 
+}
+
+func (ipfs *IpfsServer) DeleteFile(ctx context.Context, in *pufs_pb.DeleteFileRequest) (*pufs_pb.DeleteFileResponse, error) {
+  return &pufs_pb.DeleteFileResponse{}, nil 
+}
+ 
 func loggerFile() *os.File {
   if _, err := os.Stat(*logPath); os.IsNotExist(err) {
     if err := os.MkdirAll(*logPath, 0700); err != nil {
@@ -48,6 +64,7 @@ func loggerFile() *os.File {
 func main() {
   flag.Parse()
 
+  var opts []grpc.ServerOption
   log.Printf("Server starting on port: %v\nLogger started: Logging to path: %v", *port, *logPath)
 
   listener, err := net.Listen("tcp",  *port)
@@ -55,7 +72,7 @@ func main() {
     log.Println(err)
   }
 
-  grpcServer := grpc.NewServer()
+  grpcServer := grpc.NewServer(opts...)
   pufs_pb.RegisterIpfsFileSystemServer(grpcServer, &IpfsServer{}) 
 
   log.Fatal(grpcServer.Serve(listener))

@@ -7,9 +7,6 @@ option go_package = "github.com/BitlyTwiser/pufs-server/proto";
 service IpfsFileSystem {
   rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse) {}
   rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse) {}
-  //Create stream: Files are streamed back to client instead of being sent once.
-  //Note: These are not actually files, these are just placeholders for visual aid.
-  // User will have to actually request a file be downloaded.
   rpc ListFiles(FilesRequest) returns (stream FilesResponse) {}
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
 }
