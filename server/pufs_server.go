@@ -10,20 +10,23 @@ import (
 
   
 	"google.golang.org/grpc"
-  pufs_pb "github.com/BitlyTwiser/pufs-server/proto";
+  pufs_pb "github.com/pufs-server/proto"
+  //pufs_pb "github.com/BitlyTwiser/pufs-server/proto";
 )
 
-//Set up flags
 var (
   port = flag.String("port", "9000", "Set designated server port. Ensure that this will match with client")
-  logPath = flag.String("lp", "/var/log/pufs-server", "Default logging path. Can be overriden.")
+  logPath = flag.String("lp", "./", "Default logging path. Can be overriden.")
   logFileName = flag.String("lfn", "output.log", "Default logging file name. Can be overriden")
 )
 
-//Set up logger
 var (
   logger = log.New(io.MultiWriter(os.Stdout, loggerFile()), "pufs:", log.Llongfile)
 )
+
+type IpfsServer struct {
+  pufs_pb.UnimplementedIpfsFileSystemServer
+}
 
 func loggerFile() *os.File {
   if _, err := os.Stat(*logPath); os.IsNotExist(err) {
@@ -48,10 +51,12 @@ func main() {
   log.Printf("Server starting on port: %v\nLogger started: Logging to path: %v", *port, *logPath)
 
   listener, err := net.Listen("tcp",  *port)
-
   if err != nil {
     log.Println(err)
   }
 
-  log.Fatal()
+  grpcServer := grpc.NewServer()
+  pufs_pb.RegisterIpfsFileSystemServer(grpcServer, &IpfsServer{}) 
+
+  log.Fatal(grpcServer.Serve(listener))
 }
