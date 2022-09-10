@@ -9,7 +9,7 @@ import (
 	"net"
 	"os"
 
-	pufs_pb "github.com/pufs-server/proto"
+	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
 	"google.golang.org/grpc"
 	//pufs_pb "github.com/BitlyTwiser/pufs-server/proto";
 )
@@ -36,7 +36,10 @@ func (ipfs *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream puf
   return nil 
 }
 
+// This would be the list of files obtained from the doubly linked list.
+// Add raw view to see IPFS files directly
 func (ipfs *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesServer) error {
+
   return nil 
 }
 
@@ -62,6 +65,8 @@ func loggerFile() *os.File {
 }
 
 func main() {
+  //Include IPFS package here.
+  //On the given calls above, perform the necessary actions.
   flag.Parse()
 
   var opts []grpc.ServerOption

@@ -9,7 +9,7 @@ import (
 
 	"log"
 
-	pufs_pb "github.com/pufs-server/proto"
+	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -35,7 +35,7 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
   }
 }
 
-
+//Note: These are exmples of using the functions. 
 func main() {
   flag.Parse()
 
