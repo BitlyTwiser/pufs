@@ -37,7 +37,7 @@ func TestIPFS(t *testing.T) {
 	fileSystem.Append(&Node{Data: FileData{"anotherTestFinal.txt", 0, ipfsFileHash, time.Now().Unix()}})
   
   fileSystem.PrintFileName()
-	t.Log(fileSystem.Print())
+	t.Log(fileSystem.Files())
 	t.Logf("Length of current file system: %v", fileSystem.Len())
 	//fileSystem.Reverse()
 

@@ -54,9 +54,8 @@ func (f IpfsFiles) PrintFileName() {
 	}
 }
 
-//This will return stream of byte data to the client.
-//This is the IPFS response stream.
-func (f IpfsFiles) Print() []*Node {
+//Return array of ipfsfiles within the virtual file system 
+func (f IpfsFiles) Files() []*Node {
   var files []*Node
 
 	for f.head != nil {

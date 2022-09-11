@@ -39,7 +39,7 @@ message FilesRequest {}
 //Packed?
 // Multiples files
 message FilesResponse {
-  repeated File files = 1;
+  File files = 1;
 }
 
 message File {

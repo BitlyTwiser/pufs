@@ -8,10 +8,12 @@ import (
 	"log"
 	"net"
 	"os"
+  "time"
 
+	"github.com/BitlyTwiser/pufs-server/ipfs"
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
 	"google.golang.org/grpc"
-	//pufs_pb "github.com/BitlyTwiser/pufs-server/proto";
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -25,6 +27,8 @@ var (
 )
 
 type IpfsServer struct {
+  ipfsNode ipfs.IpfsNode
+  fileSystem ipfs.IpfsFiles
   pufs_pb.UnimplementedIpfsFileSystemServer
 }
 
@@ -36,9 +40,17 @@ func (ipfs *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream puf
   return nil 
 }
 
-// This would be the list of files obtained from the doubly linked list.
-// Add raw view to see IPFS files directly
 func (ipfs *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesServer) error {
+  files := ipfs.fileSystem.Files()
+  
+  for _, f := range files {
+    stream.Send(&pufs_pb.FilesResponse{Files: &pufs_pb.File{
+      Filename: f.Data.FileName,
+      FileSize: f.Data.FileSize,
+      IpfsHash: f.Data.IpfsHash,
+      UploadedAt: timestamppb.New(time.UnixMicro(f.Data.UploadedAt)),
+    }})
+  }
 
   return nil 
 }
@@ -68,6 +80,16 @@ func main() {
   //Include IPFS package here.
   //On the given calls above, perform the necessary actions.
   flag.Parse()
+  
+  // Setup Ipfs node
+  ipfsNode := ipfs.IpfsNode{LocalFolder: "/tmp/"}
+  //Setup Ipfs server and return context.
+  cancel := ipfsNode.Init()
+
+  defer cancel()
+
+  // Setup virtual File sytem.
+  fileSystem := ipfs.IpfsFiles{}
 
   var opts []grpc.ServerOption
   log.Printf("Server starting on port: %v\nLogger started: Logging to path: %v", *port, *logPath)
@@ -78,7 +100,7 @@ func main() {
   }
 
   grpcServer := grpc.NewServer(opts...)
-  pufs_pb.RegisterIpfsFileSystemServer(grpcServer, &IpfsServer{}) 
+  pufs_pb.RegisterIpfsFileSystemServer(grpcServer, &IpfsServer{ipfsNode: ipfsNode, fileSystem: fileSystem}) 
 
   log.Fatal(grpcServer.Serve(listener))
 }
