@@ -8,7 +8,8 @@ import (
 	"log"
 	"net"
 	"os"
-  "time"
+	"sync"
+	"time"
 
 	"github.com/BitlyTwiser/pufs-server/ipfs"
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
@@ -29,33 +30,58 @@ var (
 type IpfsServer struct {
   ipfsNode ipfs.IpfsNode
   fileSystem ipfs.IpfsFiles
+  mutex sync.RWMutex
   pufs_pb.UnimplementedIpfsFileSystemServer
 }
 
+//Here we will need to upload to ipfs
+// Capture IPFS hash, store in virtual file system.
+// Initial data valyes will be bytestream and the file metadata
 func (ipfs *IpfsServer) UploadFile(steam pufs_pb.IpfsFileSystem_UploadFileServer) error {
+  ipfs.mutex.Lock()
+  defer ipfs.mutex.Unlock()
+
   return nil 
 }
 
 func (ipfs *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_pb.IpfsFileSystem_DownloadFileServer) error {
+  ipfs.mutex.Lock()
+  defer ipfs.mutex.Unlock()
+
   return nil 
 }
 
 func (ipfs *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesServer) error {
+  ipfs.mutex.Lock()
+  defer ipfs.mutex.Unlock()
+
   files := ipfs.fileSystem.Files()
+
+  logger.Println("Obtaining files")
   
   for _, f := range files {
-    stream.Send(&pufs_pb.FilesResponse{Files: &pufs_pb.File{
+    err := stream.Send(&pufs_pb.FilesResponse{Files: &pufs_pb.File{
       Filename: f.Data.FileName,
       FileSize: f.Data.FileSize,
       IpfsHash: f.Data.IpfsHash,
       UploadedAt: timestamppb.New(time.UnixMicro(f.Data.UploadedAt)),
     }})
+
+    if err != nil {
+      logger.Printf("Error sending files to client: %v", err)
+      return err
+    }
   }
+
+  logger.Println("Finished sending files to client")
 
   return nil 
 }
 
 func (ipfs *IpfsServer) DeleteFile(ctx context.Context, in *pufs_pb.DeleteFileRequest) (*pufs_pb.DeleteFileResponse, error) {
+  ipfs.mutex.Lock()
+  defer ipfs.mutex.Unlock()
+
   return &pufs_pb.DeleteFileResponse{}, nil 
 }
  
@@ -70,6 +96,7 @@ func loggerFile() *os.File {
 
   if err != nil {
     fmt.Println(err)
+    //Do something better here
     panic("Something happened with the logger")
   }
 
@@ -92,15 +119,15 @@ func main() {
   fileSystem := ipfs.IpfsFiles{}
 
   var opts []grpc.ServerOption
-  log.Printf("Server starting on port: %v\nLogger started: Logging to path: %v", *port, *logPath)
+  logger.Printf("Server starting, address: localhost:%v\nLogger started: Logging to path: %v", *port, *logPath)
 
-  listener, err := net.Listen("tcp",  *port)
+  listener, err := net.Listen("tcp",  fmt.Sprintf("localhost:%v", *port))
   if err != nil {
-    log.Println(err)
+    logger.Printf("Error starting listener: %v", err)
   }
 
   grpcServer := grpc.NewServer(opts...)
   pufs_pb.RegisterIpfsFileSystemServer(grpcServer, &IpfsServer{ipfsNode: ipfsNode, fileSystem: fileSystem}) 
 
-  log.Fatal(grpcServer.Serve(listener))
+  logger.Fatal(grpcServer.Serve(listener))
 }

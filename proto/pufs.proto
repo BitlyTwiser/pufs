@@ -13,6 +13,7 @@ service IpfsFileSystem {
 
 message UploadFileRequest {
   bytes file_data = 1;
+  File file_metadata = 2;
 }
 
 message UploadFileResponse {
@@ -25,6 +26,7 @@ message DownloadFileRequest {
 
 message DownloadFileResponse {
   bytes file_data = 1;
+  File file_metadata = 2;
 }
 
 message DeleteFileRequest {
