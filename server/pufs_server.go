@@ -34,28 +34,65 @@ type IpfsServer struct {
   pufs_pb.UnimplementedIpfsFileSystemServer
 }
 
-//Here we will need to upload to ipfs
-// Capture IPFS hash, store in virtual file system.
-// Initial data valyes will be bytestream and the file metadata
-func (ipfs *IpfsServer) UploadFile(steam pufs_pb.IpfsFileSystem_UploadFileServer) error {
-  ipfs.mutex.Lock()
-  defer ipfs.mutex.Unlock()
+func (i *IpfsServer) StreamFile(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
+  i.mutex.Lock()
+  defer i.mutex.Unlock()
+
+  logger.Println("Uploading File from client") 
+
+  for {
+    fileData, err := stream.Recv() 
+
+    if err == io.EOF {
+      return nil
+    }
+
+    if err != nil {
+      logger.Printf("Error receiving data from client. Error: %v", err)
+      return err
+    }
+
+    logger.Printf("Uploading file name to IPFS: %v", fileData.FileMetadata.Filename)
+
+    ipfsHash, err := i.ipfsNode.UploadFileAndPin(&fileData.FileData)
+
+    if err != nil {
+      logger.Printf("error uploading file to IPFS. Error: %v", err)
+      return err
+    }
+
+	  i.fileSystem.Append(&ipfs.Node{Data: ipfs.FileData{
+      FileName: fileData.FileMetadata.Filename, 
+      FileSize: fileData.FileMetadata.FileSize, 
+      IpfsHash: ipfsHash, 
+      UploadedAt: fileData.FileMetadata.UploadedAt.AsTime().Unix(),
+    }})
+
+    logger.Println("File added to virtual file system")
+  }
+}
+
+//For files under the 2MiB gRPC file size cap
+func (i *IpfsServer) UploadFile(ctx context.Context, file *pufs_pb.UploadFileRequest) (*pufs_pb.UploadFileResponse, error) {
+  i.mutex.Lock()
+  defer i.mutex.Unlock()
+
+  logger.Println("Uploading file")
+  return nil, nil 
+}
+
+func (i *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_pb.IpfsFileSystem_DownloadFileServer) error {
+  i.mutex.Lock()
+  defer i.mutex.Unlock()
 
   return nil 
 }
 
-func (ipfs *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_pb.IpfsFileSystem_DownloadFileServer) error {
-  ipfs.mutex.Lock()
-  defer ipfs.mutex.Unlock()
+func (i *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesServer) error {
+  i.mutex.Lock()
+  defer i.mutex.Unlock()
 
-  return nil 
-}
-
-func (ipfs *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesServer) error {
-  ipfs.mutex.Lock()
-  defer ipfs.mutex.Unlock()
-
-  files := ipfs.fileSystem.Files()
+  files := i.fileSystem.Files()
 
   logger.Println("Obtaining files")
   
@@ -78,9 +115,9 @@ func (ipfs *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsF
   return nil 
 }
 
-func (ipfs *IpfsServer) DeleteFile(ctx context.Context, in *pufs_pb.DeleteFileRequest) (*pufs_pb.DeleteFileResponse, error) {
-  ipfs.mutex.Lock()
-  defer ipfs.mutex.Unlock()
+func (i *IpfsServer) DeleteFile(ctx context.Context, in *pufs_pb.DeleteFileRequest) (*pufs_pb.DeleteFileResponse, error) {
+  i.mutex.Lock()
+  defer i.mutex.Unlock()
 
   return &pufs_pb.DeleteFileResponse{}, nil 
 }

@@ -2,18 +2,20 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"log"
 
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
+	"github.com/BitlyTwiser/tinycrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
-  "github.com/BitlyTwiser/tinycrypt"
 )
 
 var (
@@ -23,8 +25,8 @@ var (
   password = flag.String("pass", "Testing123@", "Password used to encrypt data")
 )
 
-func uploadFile(c pufs_pb.IpfsFileSystemClient, ctx context.Context) error {
-  file, err := c.UploadFile(ctx, &pufs_pb.UploadFileRequest{})
+func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient) error {
+  fileUpload, err := client.UploadFileStream(ctx)
 
   if err != nil {
     return err
@@ -38,16 +40,86 @@ func uploadFile(c pufs_pb.IpfsFileSystemClient, ctx context.Context) error {
     UploadedAt: timestamppb.New(time.Now()),
   }
   //Byte stream can be encrypted here.
-  encryptedData, err := tinycrypt.EncryptByteStream(*password, []byte(""))
+  encryptedData, err := tinycrypt.EncryptByteStream(*password, []byte("Shalom"))
 
   if err != nil {
     return err
   }
 
-  file.Send(&pufs_pb.UploadFileRequest{FileData:  *encryptedData, FileMetadata: metadata})
+  if err := fileUpload.Send(&pufs_pb.UploadFileRequest{FileData:  *encryptedData, FileMetadata: metadata}); err != nil {
+    log.Printf("Error sending file: %v", err)
+    return err
+  }
 
   return nil
+}
+
+func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
+  file, err := os.OpenFile("../testing/testing_files/test.txt", os.O_RDONLY, 0400) 
+
+  ctx, cancel := context.WithCancel(context.Background())
+  defer cancel()
+
+  if err != nil {
+    return err
+  }
+
+  fileInfo, err := file.Stat()
+
+  if err != nil {
+    return err
+  }
+
+  fileSize := fileInfo.Size()
   
+  //gRPC data size cap at 4MB
+  if fileSize > 500_000 {
+    log.Println("Sending big file")
+    err = uploadFileStream(ctx, client)
+
+    if err != nil {
+      return err
+    }
+  } else {
+    log.Println("Sending file of size: %v", fileSize)
+    fileData := make([]byte, fileSize)
+    _, err := file.Read(fileData)
+
+    if err != nil {
+      return err
+    }
+
+    err = uploadFileData(ctx, client, fileData)
+
+    if err != nil {
+      return err
+    }
+  }
+
+  return nil
+}
+
+//Uploads a file stream that is under the 4MB gRPC file size cap
+func uploadFileData(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData []byte) error {
+  file := &pufs_pb.File{
+    Filename: "test.txt",
+    FileSize: 0,
+    IpfsHash: "",
+    UploadedAt: timestamppb.New(time.Now()),
+  }
+  log.Println("Uploading file")
+  request := &pufs_pb.UploadFileRequest{FileData: fileData, FileMetadata: file}
+  resp, err := client.UploadFile(ctx, request) 
+
+  if err != nil {
+    return err
+  }
+
+  if !resp.Sucessful {
+    return errors.New("Something went wrong uploading file.")
+  }
+
+  return nil
 }
 
 func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
@@ -80,15 +152,20 @@ func main() {
   defer conn.Close()
 
   c := pufs_pb.NewIpfsFileSystemClient(conn)
-  ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+ // ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
-  defer cancel()
-
-  files, err := c.ListFiles(ctx, &pufs_pb.FilesRequest{})
+  //defer cancel()
+  err = uploadFile(c)  
 
   if err != nil {
-    log.Fatalf("Error getting files %v", err)
+    log.Fatalf("Failed to upload file. Error: %v", err)
   }
 
-  printFiles(files)
+//  files, err := c.ListFiles(ctx, &pufs_pb.FilesRequest{})
+
+  //if err != nil {
+  //  log.Fatalf("Error getting files %v", err)
+ // }
+
+ // printFiles(files)
 }

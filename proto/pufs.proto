@@ -5,7 +5,8 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/BitlyTwiser/pufs-server/proto";
 
 service IpfsFileSystem {
-  rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse) {}
+  rpc UploadFileStream(stream UploadFileRequest) returns (UploadFileResponse) {}
+  rpc UploadFile(UploadFileRequest) returns (UploadFileResponse) {}
   rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse) {}
   rpc ListFiles(FilesRequest) returns (stream FilesResponse) {}
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
