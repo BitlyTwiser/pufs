@@ -72,13 +72,31 @@ func (i *IpfsServer) StreamFile(stream pufs_pb.IpfsFileSystem_UploadFileStreamSe
   }
 }
 
-//For files under the 2MiB gRPC file size cap
-func (i *IpfsServer) UploadFile(ctx context.Context, file *pufs_pb.UploadFileRequest) (*pufs_pb.UploadFileResponse, error) {
+//For files under the 4MB gRPC file size cap
+// DRY up function and remove dupicated code
+func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFileRequest) (*pufs_pb.UploadFileResponse, error) {
   i.mutex.Lock()
   defer i.mutex.Unlock()
 
-  logger.Println("Uploading file")
-  return nil, nil 
+  logger.Printf("Uploading file name to IPFS: %v", fileData.FileMetadata.Filename)
+
+  ipfsHash, err := i.ipfsNode.UploadFileAndPin(&fileData.FileData)
+
+  if err != nil {
+    logger.Printf("error uploading file to IPFS. Error: %v", err)
+    return nil, err
+  }
+
+  i.fileSystem.Append(&ipfs.Node{Data: ipfs.FileData{
+    FileName: fileData.FileMetadata.Filename, 
+    FileSize: fileData.FileMetadata.FileSize, 
+    IpfsHash: ipfsHash, 
+    UploadedAt: fileData.FileMetadata.UploadedAt.AsTime().Unix(),
+  }})
+
+  logger.Println("File added to virtual file system")
+
+  return &pufs_pb.UploadFileResponse{Sucessful: true}, nil 
 }
 
 func (i *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_pb.IpfsFileSystem_DownloadFileServer) error {

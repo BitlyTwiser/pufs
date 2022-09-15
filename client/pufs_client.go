@@ -55,7 +55,7 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient) 
 }
 
 func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
-  file, err := os.OpenFile("../testing/testing_files/test.txt", os.O_RDONLY, 0400) 
+  file, err := os.OpenFile("../testing/testing_files/iamatotallydifferentfile.txt", os.O_RDONLY, 0400) 
 
   ctx, cancel := context.WithCancel(context.Background())
   defer cancel()
@@ -73,7 +73,7 @@ func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
   fileSize := fileInfo.Size()
   
   //gRPC data size cap at 4MB
-  if fileSize > 500_000 {
+  if fileSize >= (2 << 21)  {
     log.Println("Sending big file")
     err = uploadFileStream(ctx, client)
 
@@ -81,7 +81,7 @@ func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
       return err
     }
   } else {
-    log.Println("Sending file of size: %v", fileSize)
+    log.Printf("Sending file of size: %v", fileSize)
     fileData := make([]byte, fileSize)
     _, err := file.Read(fileData)
 
@@ -152,20 +152,20 @@ func main() {
   defer conn.Close()
 
   c := pufs_pb.NewIpfsFileSystemClient(conn)
- // ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+  ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
-  //defer cancel()
-  err = uploadFile(c)  
+  defer cancel()
+//  err = uploadFile(c)  
 
-  if err != nil {
-    log.Fatalf("Failed to upload file. Error: %v", err)
-  }
-
-//  files, err := c.ListFiles(ctx, &pufs_pb.FilesRequest{})
-
-  //if err != nil {
-  //  log.Fatalf("Error getting files %v", err)
+ //if err != nil {
+  //  log.Fatalf("Failed to upload file. Error: %v", err)
  // }
 
- // printFiles(files)
+  files, err := c.ListFiles(ctx, &pufs_pb.FilesRequest{})
+
+  if err != nil {
+    log.Fatalf("Error getting files %v", err)
+  }
+
+  printFiles(files)
 }
