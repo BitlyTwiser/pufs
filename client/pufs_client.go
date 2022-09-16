@@ -6,9 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"time"
-
 	"log"
 
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
@@ -25,7 +25,7 @@ var (
   password = flag.String("pass", "Testing123@", "Password used to encrypt data")
 )
 
-func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient) error {
+func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64) error {
   fileUpload, err := client.UploadFileStream(ctx)
 
   if err != nil {
@@ -35,12 +35,12 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient) 
   //No IPFS hash here, that will not be known until we upload on server
   metadata := &pufs_pb.File{
     Filename: "",
-    FileSize: 0,
+    FileSize: fileSize,
     IpfsHash: "",
     UploadedAt: timestamppb.New(time.Now()),
   }
   //Byte stream can be encrypted here.
-  encryptedData, err := tinycrypt.EncryptByteStream(*password, []byte("Shalom"))
+  encryptedData, err := tinycrypt.EncryptByteStream(*password, []byte("Something"))
 
   if err != nil {
     return err
@@ -75,13 +75,14 @@ func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
   //gRPC data size cap at 4MB
   if fileSize >= (2 << 21)  {
     log.Println("Sending big file")
-    err = uploadFileStream(ctx, client)
+    err = uploadFileStream(ctx, client, file, fileSize)
 
     if err != nil {
       return err
     }
   } else {
     log.Printf("Sending file of size: %v", fileSize)
+
     fileData := make([]byte, fileSize)
     _, err := file.Read(fileData)
 
@@ -89,7 +90,8 @@ func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
       return err
     }
 
-    err = uploadFileData(ctx, client, fileData)
+    // This shoudl all be tied to custom struct type
+    err = uploadFileData(ctx, client, fileData, fileSize)
 
     if err != nil {
       return err
@@ -99,15 +101,30 @@ func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
   return nil
 }
 
+// Chunks large file into 2MB segments.
+// 2 MB was selected here as it is a nice even number to segment the files bytes streams into and is below the 4MB limit. 
+func fileChunker(fileData []byte, fileSize int64) {
+ //Calculate the chunks in 2MB segments
+  chunkSize := 1 << 21 
+
+  totalChunks := uint(math.Floor(float64(fileSize) / float64(chunkSize)))
+  
+  for i := uint(0); i < totalChunks; i++ {
+
+  }
+}
+
 //Uploads a file stream that is under the 4MB gRPC file size cap
-func uploadFileData(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData []byte) error {
+func uploadFileData(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData []byte, fileSize int64) error {
   file := &pufs_pb.File{
-    Filename: "test.txt",
-    FileSize: 0,
+    Filename: "afilethatistotallyog.txt",
+    FileSize: fileSize,
     IpfsHash: "",
     UploadedAt: timestamppb.New(time.Now()),
   }
+
   log.Println("Uploading file")
+
   request := &pufs_pb.UploadFileRequest{FileData: fileData, FileMetadata: file}
   resp, err := client.UploadFile(ctx, request) 
 
@@ -158,7 +175,7 @@ func main() {
 //  err = uploadFile(c)  
 
  //if err != nil {
-  //  log.Fatalf("Failed to upload file. Error: %v", err)
+ //   log.Fatalf("Failed to upload file. Error: %v", err)
  // }
 
   files, err := c.ListFiles(ctx, &pufs_pb.FilesRequest{})
