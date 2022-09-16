@@ -33,7 +33,9 @@ func (i *IpfsNode) Init() context.CancelFunc {
 	api, err := spawnNodeFromDefaultFolder(ctx)
 
 	if err != nil {
-		panic("Something went wrong creating the node!")
+		panic(`Something went wrong creating the node! 
+      This mostly happens when you already have a node running, 
+      check if there is an existing node then run the server again`)
 	}
 
 	i.api = api

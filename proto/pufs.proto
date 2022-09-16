@@ -8,6 +8,7 @@ service IpfsFileSystem {
   rpc UploadFileStream(stream UploadFileRequest) returns (UploadFileResponse) {}
   rpc UploadFile(UploadFileRequest) returns (UploadFileResponse) {}
   rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse) {}
+  rpc DownloadUncappedFile(DownloadFileRequest) returns (DownloadFileResponse) {}
   rpc ListFiles(FilesRequest) returns (stream FilesResponse) {}
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
 }

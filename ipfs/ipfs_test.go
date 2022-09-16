@@ -1,9 +1,9 @@
 package ipfs_test
 
 import (
+	. "github.com/BitlyTwiser/pufs-server/ipfs"
 	"github.com/stretchr/testify/assert"
 	"os"
-	. "github.com/BitlyTwiser/pufs-server/ipfs"
 	"testing"
 	"time"
 )
@@ -35,8 +35,8 @@ func TestIPFS(t *testing.T) {
 	fileSystem.Append(&Node{Data: FileData{"test.txt", 0, ipfsFileHash, time.Now().Unix()}})
 	fileSystem.Append(&Node{Data: FileData{"anotherTest.txt", 0, ipfsFileHash, time.Now().Unix()}})
 	fileSystem.Append(&Node{Data: FileData{"anotherTestFinal.txt", 0, ipfsFileHash, time.Now().Unix()}})
-  
-  fileSystem.PrintFileName()
+
+	fileSystem.PrintFileName()
 	t.Log(fileSystem.Files())
 	t.Logf("Length of current file system: %v", fileSystem.Len())
 	//fileSystem.Reverse()

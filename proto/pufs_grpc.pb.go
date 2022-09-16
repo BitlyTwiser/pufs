@@ -25,6 +25,7 @@ type IpfsFileSystemClient interface {
 	UploadFileStream(ctx context.Context, opts ...grpc.CallOption) (IpfsFileSystem_UploadFileStreamClient, error)
 	UploadFile(ctx context.Context, in *UploadFileRequest, opts ...grpc.CallOption) (*UploadFileResponse, error)
 	DownloadFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (IpfsFileSystem_DownloadFileClient, error)
+	DownloadUncappedFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (*DownloadFileResponse, error)
 	ListFiles(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (IpfsFileSystem_ListFilesClient, error)
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
 }
@@ -112,6 +113,15 @@ func (x *ipfsFileSystemDownloadFileClient) Recv() (*DownloadFileResponse, error)
 	return m, nil
 }
 
+func (c *ipfsFileSystemClient) DownloadUncappedFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (*DownloadFileResponse, error) {
+	out := new(DownloadFileResponse)
+	err := c.cc.Invoke(ctx, "/pufs.IpfsFileSystem/DownloadUncappedFile", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *ipfsFileSystemClient) ListFiles(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (IpfsFileSystem_ListFilesClient, error) {
 	stream, err := c.cc.NewStream(ctx, &IpfsFileSystem_ServiceDesc.Streams[2], "/pufs.IpfsFileSystem/ListFiles", opts...)
 	if err != nil {
@@ -160,6 +170,7 @@ type IpfsFileSystemServer interface {
 	UploadFileStream(IpfsFileSystem_UploadFileStreamServer) error
 	UploadFile(context.Context, *UploadFileRequest) (*UploadFileResponse, error)
 	DownloadFile(*DownloadFileRequest, IpfsFileSystem_DownloadFileServer) error
+	DownloadUncappedFile(context.Context, *DownloadFileRequest) (*DownloadFileResponse, error)
 	ListFiles(*FilesRequest, IpfsFileSystem_ListFilesServer) error
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
 	mustEmbedUnimplementedIpfsFileSystemServer()
@@ -177,6 +188,9 @@ func (UnimplementedIpfsFileSystemServer) UploadFile(context.Context, *UploadFile
 }
 func (UnimplementedIpfsFileSystemServer) DownloadFile(*DownloadFileRequest, IpfsFileSystem_DownloadFileServer) error {
 	return status.Errorf(codes.Unimplemented, "method DownloadFile not implemented")
+}
+func (UnimplementedIpfsFileSystemServer) DownloadUncappedFile(context.Context, *DownloadFileRequest) (*DownloadFileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DownloadUncappedFile not implemented")
 }
 func (UnimplementedIpfsFileSystemServer) ListFiles(*FilesRequest, IpfsFileSystem_ListFilesServer) error {
 	return status.Errorf(codes.Unimplemented, "method ListFiles not implemented")
@@ -262,6 +276,24 @@ func (x *ipfsFileSystemDownloadFileServer) Send(m *DownloadFileResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _IpfsFileSystem_DownloadUncappedFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DownloadFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IpfsFileSystemServer).DownloadUncappedFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pufs.IpfsFileSystem/DownloadUncappedFile",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IpfsFileSystemServer).DownloadUncappedFile(ctx, req.(*DownloadFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _IpfsFileSystem_ListFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(FilesRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -311,6 +343,10 @@ var IpfsFileSystem_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UploadFile",
 			Handler:    _IpfsFileSystem_UploadFile_Handler,
+		},
+		{
+			MethodName: "DownloadUncappedFile",
+			Handler:    _IpfsFileSystem_DownloadUncappedFile_Handler,
 		},
 		{
 			MethodName: "DeleteFile",

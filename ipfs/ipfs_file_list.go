@@ -54,16 +54,16 @@ func (f IpfsFiles) PrintFileName() {
 	}
 }
 
-//Return array of ipfsfiles within the virtual file system 
+//Return array of ipfsfiles within the virtual file system
 func (f IpfsFiles) Files() []*Node {
-  var files []*Node
+	var files []*Node
 
 	for f.head != nil {
-    files = append(files, f.head) 
+		files = append(files, f.head)
 		f.head = f.head.next
 	}
 
-  return files
+	return files
 }
 
 func (f IpfsFiles) FirstFile() (FileData, error) {
@@ -109,28 +109,28 @@ func displayNodeData(node *Node) {
 }
 
 func (f *IpfsFiles) DeleteNode(node *Node) {
-  //Head
+	//Head
 	if node.prev == nil {
-    f.head = node.next
-    node.next.prev = node.prev
-    node.prev = node.next
+		f.head = node.next
+		node.next.prev = node.prev
+		node.prev = node.next
 
 		f.length--
 
 		return
 	}
 
-  //Tail
+	//Tail
 	if node.next == nil {
-    node.prev.next = nil
-    f.tail = node.prev 
+		node.prev.next = nil
+		f.tail = node.prev
 
 		f.length--
 
 		return
 	}
 
-  //Middle node
+	//Middle node
 	node.prev.next = node.next
 	node.next.prev = node.prev
 
@@ -153,13 +153,13 @@ func (f IpfsFiles) FindNodeFromName(fileName string) string {
 }
 
 func (f *IpfsFiles) Remove(fileName string) {
-  tmp := f.head
+	tmp := f.head
 
 	for tmp != nil {
 		if tmp.Data.FileName == fileName {
 			f.DeleteNode(tmp)
 		}
 
-		tmp = tmp.next 
+		tmp = tmp.next
 	}
 }
