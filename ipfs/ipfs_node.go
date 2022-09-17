@@ -28,8 +28,8 @@ type IpfsNode struct {
 }
 
 type FileDownloadData struct {
-  IpfsHash string
-  FileData *[]byte
+	IpfsHash string
+	FileData *[]byte
 }
 
 //Return the context from this function, then defer the cancel request until whichever calling function exits
@@ -171,21 +171,21 @@ func (i *IpfsNode) GetFile(fileName string, filesList IpfsFiles) (*FileDownloadD
 	if err != nil {
 		return nil, err
 	}
-  
-  size, err := p.Size()
 
-  if err != nil {
-    return nil, err
-  }
+	size, err := p.Size()
+
+	if err != nil {
+		return nil, err
+	}
 
 	f := files.ToFile(p)
 
-  fileData := make([]byte, size)
+	fileData := make([]byte, size)
 	if _, err := io.ReadFull(f, fileData); err != nil {
-	  return nil, err
-  }
+		return nil, err
+	}
 
 	f.Close()
 
-  return &FileDownloadData{IpfsHash: ipfsHash, FileData: &fileData}, nil
+	return &FileDownloadData{IpfsHash: ipfsHash, FileData: &fileData}, nil
 }

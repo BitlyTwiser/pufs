@@ -112,18 +112,29 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-  logger.Printf("Downloading File: %v to %v", in.FileName, i.ipfsNode.LocalFolder)
-  
-  fileData, err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
+	logger.Printf("Downloading File: %v to %v", in.FileName, i.ipfsNode.LocalFolder)
 
-  if err != nil {
-    logger.Printf("Error obtaining file: %v", err)
-    return nil, err
-  }
+	fileData, err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
 
-  logger.Printf("File %v Downloaded", in.FileName)
+	if err != nil {
+		logger.Printf("Error obtaining file: %v", err)
+		return nil, err
+	}
 
-	return nil, nil
+	metadata := i.fileSystem.FindNodeDataFromName(in.FileName)
+
+	logger.Printf("File %v Downloaded", in.FileName)
+	returnMetadata := &pufs_pb.DownloadFileResponse{
+		FileData: *fileData.FileData,
+		FileMetadata: &pufs_pb.File{
+			Filename:   in.FileName,
+			FileSize:   metadata.FileSize,
+			IpfsHash:   metadata.IpfsHash,
+			UploadedAt: timestamppb.New(time.UnixMicro(metadata.UploadedAt)),
+		},
+	}
+
+	return returnMetadata, nil
 }
 
 func (i *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesServer) error {

@@ -112,16 +112,16 @@ func fileChunker(fileData []byte, fileSize int64, chunkAction func([]byte) error
 
 	for i := uint(0); i < totalChunks; i++ {
 
-    err := chunkAction(fileData[:chunkSize])
+		err := chunkAction(fileData[:chunkSize])
 
-    if err != nil {
-      return err
-    }
+		if err != nil {
+			return err
+		}
 
-    chunkSize = chunkSize*2
+		chunkSize = chunkSize * 2
 	}
 
-  return nil
+	return nil
 }
 
 //Uploads a file stream that is under the 4MB gRPC file size cap
