@@ -3,7 +3,7 @@ package ipfs
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"path/filepath"
 	"sync"
 
@@ -153,37 +153,34 @@ func (i *IpfsNode) ListFilesFromNode() error {
 	return nil
 }
 
-// Look at just using the raw stream of bytes instead of saving to disk.
-// Will consume more memory depending on size of file, so we would have to ensure the server could potentially handle that.
-// Client can stream to server, and server can stream to client.
-// Serve can actas primary middle ground with more compute.
-func (i *IpfsNode) GetFile(fileName string, filesList IpfsFiles) error {
+func (i *IpfsNode) GetFile(fileName string, filesList IpfsFiles) (*[]byte, error) {
 	// First get file from the nodes
 	ipfsHash := filesList.FindNodeFromName(fileName)
 
 	if ipfsHash == "" {
-		return errors.Errorf("No file has been found with name: %v", fileName)
+		return nil, errors.Errorf("No file has been found with name: %v", fileName)
 	}
-
-	filePath := fmt.Sprintf("%v%v", i.LocalFolder, fileName)
 
 	p, err := i.api.Unixfs().Get(i.ctx, corepath.New(ipfsHash))
 
 	if err != nil {
-		return err
+		return nil, err
 	}
+  
+  size, err := p.Size()
 
-	err = files.WriteTo(p, filePath)
+  if err != nil {
+    return nil, err
+  }
 
-	if err != nil {
-		return err
-	}
+	f := files.ToFile(p)
 
-	err = os.Remove(filePath)
+  fileData := make([]byte, size)
+	if _, err := io.ReadFull(f, fileData); err != nil {
+	  return nil, err
+  }
 
-	if err != nil {
-		errors.Errorf("Error removing file: %v. Error: %v.\n You should look to manually remove this file..", filePath, err)
-	}
+	f.Close()
 
-	return nil
+	return &fileData, nil
 }

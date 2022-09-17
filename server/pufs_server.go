@@ -99,6 +99,7 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 	return &pufs_pb.UploadFileResponse{Sucessful: true}, nil
 }
 
+// If over the 4MB cap for grpc, split and chunk into multiple files
 func (i *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_pb.IpfsFileSystem_DownloadFileServer) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
@@ -106,9 +107,21 @@ func (i *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_p
 	return nil
 }
 
+// A simplified download function without streaming for files under the 4MB byte cap forced via gRPC
 func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.DownloadFileRequest) (*pufs_pb.DownloadFileResponse, error) {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
+
+  logger.Printf("Downloading File: %v to %v", in.FileName, i.ipfsNode.LocalFolder)
+  
+  err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
+
+  if err != nil {
+    logger.Printf("Error obtaining file: %v", err)
+    return nil, err
+  }
+
+  logger.Printf("File %v Downloaded", in.FileName)
 
 	return nil, nil
 }
@@ -158,7 +171,6 @@ func loggerFile() *os.File {
 
 	if err != nil {
 		fmt.Println(err)
-		//Do something better here
 		panic("Something happened with the logger")
 	}
 
@@ -166,8 +178,6 @@ func loggerFile() *os.File {
 }
 
 func main() {
-	//Include IPFS package here.
-	//On the given calls above, perform the necessary actions.
 	flag.Parse()
 
 	// Setup Ipfs node

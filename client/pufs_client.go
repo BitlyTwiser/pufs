@@ -103,7 +103,8 @@ func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
 
 // Chunks large file into 2MB segments.
 // 2 MB was selected here as it is a nice even number to segment the files bytes streams into and is below the 4MB limit.
-func fileChunker(fileData []byte, fileSize int64) {
+// Pass in function that performs actions on the chunked data?
+func fileChunker(fileData []byte, fileSize int64, chunkAction func([]byte) error) error {
 	//Calculate the chunks in 2MB segments
 	chunkSize := 1 << 21
 
@@ -111,7 +112,16 @@ func fileChunker(fileData []byte, fileSize int64) {
 
 	for i := uint(0); i < totalChunks; i++ {
 
+    err := chunkAction(fileData[:chunkSize])
+
+    if err != nil {
+      return err
+    }
+
+    chunkSize = chunkSize*2
 	}
+
+  return nil
 }
 
 //Uploads a file stream that is under the 4MB gRPC file size cap
