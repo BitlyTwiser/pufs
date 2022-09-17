@@ -43,13 +43,13 @@ func TestIPFS(t *testing.T) {
 
 	//The IpfsNode needs an instance of the fileSystem type passed here to access the IpfsList
 	t.Log("Getting File")
-  fileData, err := inode.GetFile("test.txt", fileSystem)
+  f, err := inode.GetFile("test.txt", fileSystem)
 
 	//Get File
 	assert.Nil(t, err)
-  assert.NotNil(t, fileData)
+  assert.NotNil(t, f)
 
-  t.Logf("FileData From getting file: %v", *fileData)
+  t.Logf("FileData From getting file: %v. Data: %v", f.IpfsHash, *f.FileData) 
 
 	err = inode.ListFilesFromNode()
 

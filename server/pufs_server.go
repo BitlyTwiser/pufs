@@ -114,7 +114,7 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 
   logger.Printf("Downloading File: %v to %v", in.FileName, i.ipfsNode.LocalFolder)
   
-  err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
+  fileData, err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
 
   if err != nil {
     logger.Printf("Error obtaining file: %v", err)

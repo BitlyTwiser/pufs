@@ -27,6 +27,11 @@ type IpfsNode struct {
 	LocalFolder string
 }
 
+type FileDownloadData struct {
+  IpfsHash string
+  FileData *[]byte
+}
+
 //Return the context from this function, then defer the cancel request until whichever calling function exits
 func (i *IpfsNode) Init() context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -153,7 +158,7 @@ func (i *IpfsNode) ListFilesFromNode() error {
 	return nil
 }
 
-func (i *IpfsNode) GetFile(fileName string, filesList IpfsFiles) (*[]byte, error) {
+func (i *IpfsNode) GetFile(fileName string, filesList IpfsFiles) (*FileDownloadData, error) {
 	// First get file from the nodes
 	ipfsHash := filesList.FindNodeFromName(fileName)
 
@@ -182,5 +187,5 @@ func (i *IpfsNode) GetFile(fileName string, filesList IpfsFiles) (*[]byte, error
 
 	f.Close()
 
-	return &fileData, nil
+  return &FileDownloadData{IpfsHash: ipfsHash, FileData: &fileData}, nil
 }
