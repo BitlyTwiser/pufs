@@ -25,6 +25,55 @@ var (
 	password   = flag.String("pass", "Testing123@", "Password used to encrypt data")
 )
 
+type Command struct {
+	uploadFs     *flag.FlagSet
+	downloadFs   *flag.FlagSet
+	listFs       *flag.FlagSet
+	uploadData   uploadData
+	downloadData downloadData
+	command      string
+}
+
+type uploadData struct {
+	name    *string
+	path    *string
+	encrypt *bool
+	pass    *string
+}
+
+type downloadData struct {
+	name *string
+	path *string
+}
+
+func PufsClient() *Command {
+	c := &Command{
+		uploadFs:   flag.NewFlagSet("upload", flag.ContinueOnError),
+		downloadFs: flag.NewFlagSet("download", flag.ContinueOnError),
+		listFs:     flag.NewFlagSet("list", flag.ContinueOnError),
+	}
+
+	// Upload Data
+	ud := uploadData{
+		name:    c.uploadFs.String("name", "", "Name of file to upload"),
+		path:    c.uploadFs.String("path", "", "Path of file to upload"),
+		encrypt: c.uploadFs.Bool("encrypt", false, "To encrypt file on upload"),
+		pass:    c.uploadFs.String("pass", "", "Password used to encrypt file"),
+	}
+
+	c.uploadData = ud
+
+	//Download Data
+	dd := downloadData{
+		name: c.downloadFs.String("name", "", "Name of file to download"),
+		path: c.downloadFs.String("path", "", "Location to download file too"),
+	}
+
+	c.downloadData = dd
+
+	return c
+}
+
 func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64) error {
 	fileUpload, err := client.UploadFileStream(ctx)
 
@@ -40,7 +89,7 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, 
 		UploadedAt: timestamppb.New(time.Now()),
 	}
 	//Byte stream can be encrypted here.
-	encryptedData, err := tinycrypt.EncryptByteStream(*password, []byte("Something"))
+	encryptedData, err := tinycrypt.EncryptByteStream("Password123", []byte("Something"))
 
 	if err != nil {
 		return err
@@ -101,11 +150,36 @@ func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
 	return nil
 }
 
+func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	log.Printf("Downliading file: %v", fileName)
+
+	fileResp, err := client.DownloadUncappedFile(ctx, &pufs_pb.DownloadFileRequest{FileName: fileName})
+
+	if err != nil {
+		return err
+	}
+
+	fileData, fileMetadata := fileResp.FileData, fileResp.FileMetadata
+
+	fmt.Println(fileData, fileMetadata)
+	log.Println("Downloading file and saving to disk...")
+
+	err = os.WriteFile(fmt.Sprintf("/tmp/%v", fileMetadata.Filename), fileData, 0700)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Chunks large file into 2MB segments.
 // 2 MB was selected here as it is a nice even number to segment the files bytes streams into and is below the 4MB limit.
 // Pass in function that performs actions on the chunked data?
 func fileChunker(fileData []byte, fileSize int64, chunkAction func([]byte) error) error {
-	//Calculate the chunks in 2MB segments
+	//Calculate the chunks in 2MB segments, make this variable?
 	chunkSize := 1 << 21
 
 	totalChunks := uint(math.Floor(float64(fileSize) / float64(chunkSize)))
@@ -168,7 +242,7 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
 
 //Note: These are exmples of using the functions.
 func main() {
-	flag.Parse()
+  flag.Parse()
 
 	conn, err := grpc.Dial(fmt.Sprintf("%v:%v", *serverAddr, *serverPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 
@@ -182,17 +256,50 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	defer cancel()
-	//  err = uploadFile(c)
 
-	//if err != nil {
-	//   log.Fatalf("Failed to upload file. Error: %v", err)
-	// }
-
-	files, err := c.ListFiles(ctx, &pufs_pb.FilesRequest{})
-
-	if err != nil {
-		log.Fatalf("Error getting files %v", err)
+	if len(os.Args) < 2 {
+		fmt.Println("Expected arguments")
+		os.Exit(1)
 	}
 
-	printFiles(files)
+	command := PufsClient()
+
+	switch os.Args[1] {
+
+	case "upload":
+		log.Println("Uploading FIle")
+		command.uploadFs.Parse(os.Args[2:])
+		log.Println(command.downloadData.name)
+
+		err = uploadFile(c)
+
+		if err != nil {
+			panic("Death thing while uploading")
+		}
+	case "download":
+		log.Println("Downloading File")
+		command.downloadFs.Parse(os.Args[2:])
+		log.Println(*command.downloadData.name)
+
+		err = downloadFile(*command.downloadData.name, c)
+
+		if err != nil {
+			panic("Death downloading file")
+		}
+	case "list":
+		log.Println("Listing files")
+		command.listFs.Parse(os.Args[2:])
+
+		files, err := c.ListFiles(ctx, &pufs_pb.FilesRequest{})
+
+		if err != nil {
+			log.Fatalf("Error getting files %v", err)
+		}
+
+		printFiles(files)
+
+	case "default":
+    //Print help here
+		log.Println("Well nothing happened")
+	}
 }
