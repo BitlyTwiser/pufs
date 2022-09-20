@@ -255,7 +255,7 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
 // Listen for file changes realtime.
 func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Context) {
 	for {
-		rand.Seed(20)
+		rand.Seed(time.Now().UTC().UnixNano())
 
 		stream, err := client.ListFilesEventStream(ctx, &pufs_pb.FilesRequest{Id: int64(rand.Intn(100))})
 
