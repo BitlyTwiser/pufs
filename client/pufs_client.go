@@ -31,7 +31,7 @@ type Command struct {
 	downloadFs   *flag.FlagSet
 	listFs       *flag.FlagSet
 	deleteFs     *flag.FlagSet
-  streamFs     *flag.FlagSet
+	streamFs     *flag.FlagSet
 	uploadData   uploadData
 	downloadData downloadData
 	deleteData   deleteData
@@ -60,7 +60,7 @@ func PufsClient() *Command {
 		downloadFs: flag.NewFlagSet("download", flag.ContinueOnError),
 		listFs:     flag.NewFlagSet("list", flag.ContinueOnError),
 		deleteFs:   flag.NewFlagSet("delete", flag.ContinueOnError),
-    streamFs: flag.NewFlagSet("stream", flag.ContinueOnError),
+		streamFs:   flag.NewFlagSet("stream", flag.ContinueOnError),
 	}
 
 	// Upload Data
@@ -90,7 +90,7 @@ func PufsClient() *Command {
 	return c
 }
 
-func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64) error {
+func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
 	fileUpload, err := client.UploadFileStream(ctx)
 
 	if err != nil {
@@ -99,7 +99,7 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, 
 
 	//No IPFS hash here, that will not be known until we upload on server
 	metadata := &pufs_pb.File{
-		Filename:   "",
+		Filename:   fileName,
 		FileSize:   fileSize,
 		IpfsHash:   "",
 		UploadedAt: timestamppb.New(time.Now()),
@@ -119,7 +119,7 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, 
 	return nil
 }
 
-func uploadFile(path,fileName string, client pufs_pb.IpfsFileSystemClient) error {
+func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient) error {
 	file, err := os.OpenFile(fmt.Sprintf("%v%v", path, fileName), os.O_RDONLY, 0400)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -140,7 +140,7 @@ func uploadFile(path,fileName string, client pufs_pb.IpfsFileSystemClient) error
 	//gRPC data size cap at 4MB
 	if fileSize >= (2 << 21) {
 		log.Println("Sending big file")
-		err = uploadFileStream(ctx, client, file, fileSize)
+		err = uploadFileStream(ctx, client, file, fileSize, fileName)
 
 		if err != nil {
 			return err
@@ -156,7 +156,7 @@ func uploadFile(path,fileName string, client pufs_pb.IpfsFileSystemClient) error
 		}
 
 		// This shoudl all be tied to custom struct type
-		err = uploadFileData(ctx, client, fileData, fileSize)
+		err = uploadFileData(ctx, client, fileData, fileSize, fileName)
 
 		if err != nil {
 			return err
@@ -200,8 +200,7 @@ func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
 
 	fmt.Println(fileData, fileMetadata)
 	log.Println("Downloading file and saving to disk...")
-  
-  // Look to make this path dynamic, something the user presentes
+
 	err = os.WriteFile(fmt.Sprintf("/tmp/%v", fileMetadata.Filename), fileData, 0700)
 
 	if err != nil {
@@ -212,9 +211,9 @@ func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
 }
 
 //Uploads a file stream that is under the 4MB gRPC file size cap
-func uploadFileData(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData []byte, fileSize int64) error {
+func uploadFileData(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData []byte, fileSize int64, fileName string) error {
 	file := &pufs_pb.File{
-		Filename:   "afilethatistotallyog.txt",
+		Filename:   fileName,
 		FileSize:   fileSize,
 		IpfsHash:   "",
 		UploadedAt: timestamppb.New(time.Now()),
@@ -245,7 +244,7 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
 		}
 
 		if err != nil {
-      log.Fatalf("Error reading file stream. Error: %v", err)
+			log.Fatalf("Error reading file stream. Error: %v", err)
 			break
 		}
 
@@ -255,49 +254,37 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
 
 // Listen for file changes realtime.
 func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Context) {
-  for {
-    rand.Seed(20)
-    
-    stream, err := client.ListFilesEventStream(ctx, &pufs_pb.FilesRequest{Id: int64(rand.Intn(100))})
-    
-    // Retrun on failure
-    if err != nil || stream == nil {
-      log.Println("Error or stream not empty")
-  	  time.Sleep(time.Second * 5)
+	for {
+		rand.Seed(20)
 
-      continue
-    }
-    
-    for {
-      file, err := stream.Recv()
+		stream, err := client.ListFilesEventStream(ctx, &pufs_pb.FilesRequest{Id: int64(rand.Intn(100))})
 
-      if err == io.EOF {
-        break
-      }
+		// Retrun on failure
+		if err != nil || stream == nil {
+			log.Println("Error or stream not empty")
+			time.Sleep(time.Second * 5)
 
-      if err != nil {
-        log.Fatalf("Error reading file stream. Error: %v", err)
-        break
-      }
+			continue
+		} else {
+			for {
+				file, err := stream.Recv()
 
-      fmt.Printf("File: %v", file.Files)
-    }
+				if err == io.EOF {
+					log.Println("All files read, awaiting..")
+					stream = nil
+					break
+				}
 
-    if err == io.EOF {
-      log.Println("No files found, awaiting files..")
-  	  time.Sleep(time.Second * 5)
+				if err != nil {
+					log.Println("error encrountered, retrying..")
+					stream = nil
+					break
+				}
 
-       continue 
-    }
-
-    if err != nil {
-      log.Println("Error getting files, retrying...")
-      stream = nil
-  	  time.Sleep(time.Second * 5)
-
-      continue
-    }
-  }
+				fmt.Printf("File: %v", file.Files)
+			}
+		}
+	}
 }
 
 //Note: These are exmples of using the functions.
@@ -330,14 +317,14 @@ func main() {
 		log.Println("Uploading FIle")
 		command.uploadFs.Parse(os.Args[2:])
 
-    if *command.uploadData.path == "" {
-      log.Println("Must give path")
-      os.Exit(1)
-    }
+		if *command.uploadData.path == "" {
+			log.Println("Must give path")
+			os.Exit(1)
+		}
 
-    path, fileName := path.Split(*command.uploadData.path)
-    
-    //if dir == "" assume "./" ?
+		path, fileName := path.Split(*command.uploadData.path)
+
+		//if dir == "" assume "./" ?
 		err = uploadFile(path, fileName, c)
 
 		if err != nil {
@@ -358,16 +345,16 @@ func main() {
 		log.Printf("Deleting File: %v", *command.deleteData.name)
 
 		// Could also delete by IPFS hash
-    err = deleteFile(*command.deleteData.name, c)
+		err = deleteFile(*command.deleteData.name, c)
 
-    if err != nil {
-      panic("Death while deleting")
-    }
-  case "stream":
-    command.streamFs.Parse(os.Args[2:])
-    log.Printf("Streaming files..")
-    
-    subscribeFileStream(c, ctx)    
+		if err != nil {
+			panic("Death while deleting")
+		}
+	case "stream":
+		command.streamFs.Parse(os.Args[2:])
+		log.Printf("Streaming files..")
+
+		subscribeFileStream(c, ctx)
 	case "list":
 		log.Println("Listing files")
 		command.listFs.Parse(os.Args[2:])
