@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -32,6 +33,17 @@ type IpfsServer struct {
 	fileSystem ipfs.IpfsFiles
 	mutex      sync.RWMutex
 	pufs_pb.UnimplementedIpfsFileSystemServer
+  fileSub fileSubscriber
+}
+
+type fileSubscriber struct {
+  eventsChannel chan int
+  quitChannel chan int
+  fileEventSubs sync.Map
+}
+
+type fileStream struct {
+  stream pufs_pb.IpfsFileSystem_ListFilesServer
 }
 
 func (i *IpfsServer) StreamFile(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
@@ -73,7 +85,6 @@ func (i *IpfsServer) StreamFile(stream pufs_pb.IpfsFileSystem_UploadFileStreamSe
 }
 
 //For files under the 4MB gRPC file size cap
-// DRY up function and remove dupicated code
 func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFileRequest) (*pufs_pb.UploadFileResponse, error) {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
@@ -96,10 +107,14 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 
 	logger.Println("File added to virtual file system")
 
+  // Push bool into events channel to force refresh of file clients
+  i.fileSub.eventsChannel <- 1
+
 	return &pufs_pb.UploadFileResponse{Sucessful: true}, nil
 }
 
 // If over the 4MB cap for grpc, split and chunk into multiple files
+// import chunking package here.
 func (i *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_pb.IpfsFileSystem_DownloadFileServer) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
@@ -137,10 +152,53 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 	return returnMetadata, nil
 }
 
-func (i *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesServer) error {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
+func (i *IpfsServer) ListFilesEventStream(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesEventStreamServer) error {
+  logger.Printf("Client connected with id: %v", in.Id) 
+  i.fileSub.fileEventSubs.Store(in.Id, fileStream{stream: stream})
 
+  // Print messages for all subscribers
+  for {
+    select {
+      case <-i.fileSub.eventsChannel:
+        logger.Println("Streaming files to clients..")
+
+        i.fileSub.fileEventSubs.Range(func (k, v interface{}) bool {
+          // For everystream, sendFiles.
+          s, ok := i.fileSub.fileEventSubs.Load(k)
+
+          if !ok {
+            logger.Printf("Error filding event from key: %v", k)
+
+            return false
+          }
+
+          logger.Printf("Found stream: %v", s)
+
+          stream, ok := s.(fileStream)
+
+          if !ok {
+            logger.Println("Error converting stream")
+
+            return false
+          }
+
+          err := i.sendFiles(stream.stream)
+
+          if err != nil {
+            logger.Printf("Error sending files. Error: %v", err)
+            return false
+          }
+
+          return true
+      })
+      case <-i.fileSub.quitChannel:
+        logger.Println("Disconnecting")
+        return nil
+    }
+  }
+}
+
+func (i *IpfsServer) sendFiles(stream pufs_pb.IpfsFileSystem_ListFilesServer) error {
 	files := i.fileSystem.Files()
 
 	logger.Println("Obtaining files")
@@ -154,10 +212,23 @@ func (i *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFile
 		}})
 
 		if err != nil {
-			logger.Printf("Error sending files to client: %v", err)
 			return err
 		}
 	}
+
+  return nil
+}
+
+func (i *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesServer) error {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+  err := i.sendFiles(stream)
+
+  if err != nil {
+		logger.Printf("Error sending files to client: %v", err)
+    return err
+  }
 
 	logger.Println("Finished sending files to client")
 
@@ -167,8 +238,22 @@ func (i *IpfsServer) ListFiles(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFile
 func (i *IpfsServer) DeleteFile(ctx context.Context, in *pufs_pb.DeleteFileRequest) (*pufs_pb.DeleteFileResponse, error) {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
+  
+  logger.Printf("Deleting File: %v", in.FileName)
+  node := i.fileSystem.FindNode(in.FileName) 
 
-	return &pufs_pb.DeleteFileResponse{}, nil
+  if node == nil {
+    logger.Printf("No node with file name: %v was found in filesystem", in.FileName)
+    return nil, errors.New("No file found")
+  } else {
+    i.fileSystem.DeleteNode(node)
+  }
+
+  logger.Println("File deleted")
+
+  response := &pufs_pb.DeleteFileResponse{Successful: true}
+
+	return response, nil
 }
 
 func loggerFile() *os.File {
@@ -208,9 +293,20 @@ func main() {
 	if err != nil {
 		logger.Printf("Error starting listener: %v", err)
 	}
+  
+  // Create server
+  // Take note of the potential harm this may do with the buffered channel of 1.
+  // If things break in the future, this may be why.
+  eventChannel := make(chan int, 1)
 
 	grpcServer := grpc.NewServer(opts...)
-	pufs_pb.RegisterIpfsFileSystemServer(grpcServer, &IpfsServer{ipfsNode: ipfsNode, fileSystem: fileSystem})
+  server := &IpfsServer{
+    ipfsNode: ipfsNode, 
+    fileSystem: fileSystem, 
+    fileSub: fileSubscriber{eventsChannel: eventChannel},
+  }
+
+  pufs_pb.RegisterIpfsFileSystemServer(grpcServer, server)
 
 	logger.Fatal(grpcServer.Serve(listener))
 }

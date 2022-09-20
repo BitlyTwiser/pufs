@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
+	"math/rand"
 	"os"
+	"path"
 	"time"
 
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
@@ -29,13 +30,15 @@ type Command struct {
 	uploadFs     *flag.FlagSet
 	downloadFs   *flag.FlagSet
 	listFs       *flag.FlagSet
+	deleteFs     *flag.FlagSet
+  streamFs     *flag.FlagSet
 	uploadData   uploadData
 	downloadData downloadData
+	deleteData   deleteData
 	command      string
 }
 
 type uploadData struct {
-	name    *string
 	path    *string
 	encrypt *bool
 	pass    *string
@@ -46,16 +49,22 @@ type downloadData struct {
 	path *string
 }
 
+type deleteData struct {
+	name     *string
+	ipfsHash *string
+}
+
 func PufsClient() *Command {
 	c := &Command{
 		uploadFs:   flag.NewFlagSet("upload", flag.ContinueOnError),
 		downloadFs: flag.NewFlagSet("download", flag.ContinueOnError),
 		listFs:     flag.NewFlagSet("list", flag.ContinueOnError),
+		deleteFs:   flag.NewFlagSet("delete", flag.ContinueOnError),
+    streamFs: flag.NewFlagSet("stream", flag.ContinueOnError),
 	}
 
 	// Upload Data
 	ud := uploadData{
-		name:    c.uploadFs.String("name", "", "Name of file to upload"),
 		path:    c.uploadFs.String("path", "", "Path of file to upload"),
 		encrypt: c.uploadFs.Bool("encrypt", false, "To encrypt file on upload"),
 		pass:    c.uploadFs.String("pass", "", "Password used to encrypt file"),
@@ -70,6 +79,13 @@ func PufsClient() *Command {
 	}
 
 	c.downloadData = dd
+
+	// Delete flag
+	d := deleteData{
+		name: c.deleteFs.String("name", "", "Name of the file to delete"),
+	}
+
+	c.deleteData = d
 
 	return c
 }
@@ -103,8 +119,8 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, 
 	return nil
 }
 
-func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
-	file, err := os.OpenFile("../testing/testing_files/iamatotallydifferentfile.txt", os.O_RDONLY, 0400)
+func uploadFile(path,fileName string, client pufs_pb.IpfsFileSystemClient) error {
+	file, err := os.OpenFile(fmt.Sprintf("%v%v", path, fileName), os.O_RDONLY, 0400)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -150,6 +166,25 @@ func uploadFile(client pufs_pb.IpfsFileSystemClient) error {
 	return nil
 }
 
+func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	resp, err := client.DeleteFile(ctx, &pufs_pb.DeleteFileRequest{FileName: fileName})
+
+	if err != nil {
+		return err
+	}
+
+	if resp.Successful {
+		log.Println("File deleted")
+	} else {
+		return errors.New(fmt.Sprintf("Error occured deleting file: %v", resp))
+	}
+
+	return nil
+}
+
 func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -165,34 +200,12 @@ func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
 
 	fmt.Println(fileData, fileMetadata)
 	log.Println("Downloading file and saving to disk...")
-
+  
+  // Look to make this path dynamic, something the user presentes
 	err = os.WriteFile(fmt.Sprintf("/tmp/%v", fileMetadata.Filename), fileData, 0700)
 
 	if err != nil {
 		return err
-	}
-
-	return nil
-}
-
-// Chunks large file into 2MB segments.
-// 2 MB was selected here as it is a nice even number to segment the files bytes streams into and is below the 4MB limit.
-// Pass in function that performs actions on the chunked data?
-func fileChunker(fileData []byte, fileSize int64, chunkAction func([]byte) error) error {
-	//Calculate the chunks in 2MB segments, make this variable?
-	chunkSize := 1 << 21
-
-	totalChunks := uint(math.Floor(float64(fileSize) / float64(chunkSize)))
-
-	for i := uint(0); i < totalChunks; i++ {
-
-		err := chunkAction(fileData[:chunkSize])
-
-		if err != nil {
-			return err
-		}
-
-		chunkSize = chunkSize * 2
 	}
 
 	return nil
@@ -232,7 +245,7 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
 		}
 
 		if err != nil {
-			log.Fatalf("Error reading file stream")
+      log.Fatalf("Error reading file stream. Error: %v", err)
 			break
 		}
 
@@ -240,9 +253,56 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
 	}
 }
 
+// Listen for file changes realtime.
+func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Context) {
+  for {
+    rand.Seed(20)
+    
+    stream, err := client.ListFilesEventStream(ctx, &pufs_pb.FilesRequest{Id: int64(rand.Intn(100))})
+    
+    // Retrun on failure
+    if err != nil || stream == nil {
+      log.Println("Error or stream not empty")
+  	  time.Sleep(time.Second * 5)
+
+      continue
+    }
+    
+    for {
+      file, err := stream.Recv()
+
+      if err == io.EOF {
+        break
+      }
+
+      if err != nil {
+        log.Fatalf("Error reading file stream. Error: %v", err)
+        break
+      }
+
+      fmt.Printf("File: %v", file.Files)
+    }
+
+    if err == io.EOF {
+      log.Println("No files found, awaiting files..")
+  	  time.Sleep(time.Second * 5)
+
+       continue 
+    }
+
+    if err != nil {
+      log.Println("Error getting files, retrying...")
+      stream = nil
+  	  time.Sleep(time.Second * 5)
+
+      continue
+    }
+  }
+}
+
 //Note: These are exmples of using the functions.
 func main() {
-  flag.Parse()
+	flag.Parse()
 
 	conn, err := grpc.Dial(fmt.Sprintf("%v:%v", *serverAddr, *serverPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 
@@ -253,7 +313,7 @@ func main() {
 	defer conn.Close()
 
 	c := pufs_pb.NewIpfsFileSystemClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	defer cancel()
 
@@ -269,9 +329,16 @@ func main() {
 	case "upload":
 		log.Println("Uploading FIle")
 		command.uploadFs.Parse(os.Args[2:])
-		log.Println(command.downloadData.name)
 
-		err = uploadFile(c)
+    if *command.uploadData.path == "" {
+      log.Println("Must give path")
+      os.Exit(1)
+    }
+
+    path, fileName := path.Split(*command.uploadData.path)
+    
+    //if dir == "" assume "./" ?
+		err = uploadFile(path, fileName, c)
 
 		if err != nil {
 			panic("Death thing while uploading")
@@ -286,6 +353,21 @@ func main() {
 		if err != nil {
 			panic("Death downloading file")
 		}
+	case "delete":
+		command.deleteFs.Parse(os.Args[2:])
+		log.Printf("Deleting File: %v", *command.deleteData.name)
+
+		// Could also delete by IPFS hash
+    err = deleteFile(*command.deleteData.name, c)
+
+    if err != nil {
+      panic("Death while deleting")
+    }
+  case "stream":
+    command.streamFs.Parse(os.Args[2:])
+    log.Printf("Streaming files..")
+    
+    subscribeFileStream(c, ctx)    
 	case "list":
 		log.Println("Listing files")
 		command.listFs.Parse(os.Args[2:])
@@ -299,7 +381,7 @@ func main() {
 		printFiles(files)
 
 	case "default":
-    //Print help here
+		//Print help here
 		log.Println("Well nothing happened")
 	}
 }

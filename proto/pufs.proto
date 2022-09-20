@@ -11,6 +11,7 @@ service IpfsFileSystem {
   rpc DownloadUncappedFile(DownloadFileRequest) returns (DownloadFileResponse) {}
   rpc ListFiles(FilesRequest) returns (stream FilesResponse) {}
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
+  rpc ListFilesEventStream(FilesRequest) returns (stream FilesResponse) {}
 }
 
 message UploadFileRequest {
@@ -38,7 +39,9 @@ message DeleteFileResponse {
   bool successful = 1;
 }
 
-message FilesRequest {}
+message FilesRequest {
+    int64 id = 1;
+  }
 
 //Packed?
 // Multiples files

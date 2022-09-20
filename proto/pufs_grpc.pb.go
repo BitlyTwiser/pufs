@@ -28,6 +28,7 @@ type IpfsFileSystemClient interface {
 	DownloadUncappedFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (*DownloadFileResponse, error)
 	ListFiles(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (IpfsFileSystem_ListFilesClient, error)
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
+	ListFilesEventStream(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (IpfsFileSystem_ListFilesEventStreamClient, error)
 }
 
 type ipfsFileSystemClient struct {
@@ -163,6 +164,38 @@ func (c *ipfsFileSystemClient) DeleteFile(ctx context.Context, in *DeleteFileReq
 	return out, nil
 }
 
+func (c *ipfsFileSystemClient) ListFilesEventStream(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (IpfsFileSystem_ListFilesEventStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &IpfsFileSystem_ServiceDesc.Streams[3], "/pufs.IpfsFileSystem/ListFilesEventStream", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &ipfsFileSystemListFilesEventStreamClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type IpfsFileSystem_ListFilesEventStreamClient interface {
+	Recv() (*FilesResponse, error)
+	grpc.ClientStream
+}
+
+type ipfsFileSystemListFilesEventStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *ipfsFileSystemListFilesEventStreamClient) Recv() (*FilesResponse, error) {
+	m := new(FilesResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // IpfsFileSystemServer is the server API for IpfsFileSystem service.
 // All implementations must embed UnimplementedIpfsFileSystemServer
 // for forward compatibility
@@ -173,6 +206,7 @@ type IpfsFileSystemServer interface {
 	DownloadUncappedFile(context.Context, *DownloadFileRequest) (*DownloadFileResponse, error)
 	ListFiles(*FilesRequest, IpfsFileSystem_ListFilesServer) error
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
+	ListFilesEventStream(*FilesRequest, IpfsFileSystem_ListFilesEventStreamServer) error
 	mustEmbedUnimplementedIpfsFileSystemServer()
 }
 
@@ -197,6 +231,9 @@ func (UnimplementedIpfsFileSystemServer) ListFiles(*FilesRequest, IpfsFileSystem
 }
 func (UnimplementedIpfsFileSystemServer) DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteFile not implemented")
+}
+func (UnimplementedIpfsFileSystemServer) ListFilesEventStream(*FilesRequest, IpfsFileSystem_ListFilesEventStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method ListFilesEventStream not implemented")
 }
 func (UnimplementedIpfsFileSystemServer) mustEmbedUnimplementedIpfsFileSystemServer() {}
 
@@ -333,6 +370,27 @@ func _IpfsFileSystem_DeleteFile_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IpfsFileSystem_ListFilesEventStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(FilesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(IpfsFileSystemServer).ListFilesEventStream(m, &ipfsFileSystemListFilesEventStreamServer{stream})
+}
+
+type IpfsFileSystem_ListFilesEventStreamServer interface {
+	Send(*FilesResponse) error
+	grpc.ServerStream
+}
+
+type ipfsFileSystemListFilesEventStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *ipfsFileSystemListFilesEventStreamServer) Send(m *FilesResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // IpfsFileSystem_ServiceDesc is the grpc.ServiceDesc for IpfsFileSystem service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -367,6 +425,11 @@ var IpfsFileSystem_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ListFiles",
 			Handler:       _IpfsFileSystem_ListFiles_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ListFilesEventStream",
+			Handler:       _IpfsFileSystem_ListFilesEventStream_Handler,
 			ServerStreams: true,
 		},
 	},

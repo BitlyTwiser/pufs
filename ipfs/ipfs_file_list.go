@@ -152,6 +152,18 @@ func (f IpfsFiles) FindNodeFromName(fileName string) string {
 	return ""
 }
 
+func (f IpfsFiles) FindNode(nodeName string) *Node {
+	for f.head != nil {
+		if f.head.Data.FileName == nodeName {
+			return f.head
+		}
+
+		f.head = f.head.next
+	}
+
+	return nil
+}
+
 func (f IpfsFiles) FindNodeDataFromName(fileName string) *FileData {
 	for f.head != nil {
 		if f.head.Data.FileName == fileName {
