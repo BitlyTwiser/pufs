@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -51,13 +52,18 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-	logger.Println("Uploading File from client")
+  logger.Println("Uploading File steam from client")
+
+	fileData, err := stream.Recv()
+
+  buffer := &bytes.Buffer{}
 
 	for {
-		fileData, err := stream.Recv()
+	  fileData, err := stream.Recv()
+    fileData.GetFileData()
 
 		if err == io.EOF {
-			return nil
+			break
 		}
 
 		if err != nil {
@@ -65,9 +71,13 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 			return err
 		}
 
-		logger.Printf("Uploading file name to IPFS: %v", fileData.FileMetadata.Filename)
+    buffer.Write(fileData.GetFileData())
+  }
 
-		ipfsHash, err := i.ipfsNode.UploadFileAndPin(&fileData.FileData)
+		logger.Printf("Uploading file name to IPFS: %v", fileData.GetFileMetadata().Filename)
+    
+    // Store full set of data into IPFS
+		ipfsHash, err := i.ipfsNode.UploadFileAndPin(buffer.Bytes())
 
 		if err != nil {
 			logger.Printf("error uploading file to IPFS. Error: %v", err)
@@ -75,14 +85,16 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 		}
 
 		i.fileSystem.Append(&ipfs.Node{Data: ipfs.FileData{
-			FileName:   fileData.FileMetadata.Filename,
-			FileSize:   fileData.FileMetadata.FileSize,
+			FileName:   fileData.GetFileMetadata().Filename,
+			FileSize:   fileData.GetFileMetadata().FileSize,
 			IpfsHash:   ipfsHash,
-			UploadedAt: fileData.FileMetadata.UploadedAt.AsTime().Unix(),
+			UploadedAt: fileData.GetFileMetadata().UploadedAt.AsTime().Unix(),
 		}})
 
 		logger.Println("File added to virtual file system")
-	}
+	
+
+  return nil
 }
 
 //For files under the 4MB gRPC file size cap
@@ -92,7 +104,7 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 
 	logger.Printf("Uploading file name to IPFS: %v", fileData.FileMetadata.Filename)
 
-	ipfsHash, err := i.ipfsNode.UploadFileAndPin(&fileData.FileData)
+	ipfsHash, err := i.ipfsNode.UploadFileAndPin(fileData.FileData)
 
 	if err != nil {
 		logger.Printf("error uploading file to IPFS. Error: %v", err)

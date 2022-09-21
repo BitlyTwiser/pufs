@@ -23,7 +23,7 @@ func TestIPFS(t *testing.T) {
 
 	defer cancel()
 
-	ipfsFileHash, err := inode.UploadFileAndPin(&file)
+	ipfsFileHash, err := inode.UploadFileAndPin(file)
 	assert.Nil(t, err)
 
 	t.Logf("File uploaded and pinned. File Hash: %v", ipfsFileHash)

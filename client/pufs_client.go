@@ -12,8 +12,9 @@ import (
 	"path"
 	"time"
 
+  "github.com/BitlyTwiser/tinychunk"
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
-	"github.com/BitlyTwiser/tinycrypt"
+//	"github.com/BitlyTwiser/tinycrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -92,6 +93,7 @@ func PufsClient() *Command {
 }
 
 func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
+  log.Printf("Sending large file.. File Size: %v", fileSize)
 	fileUpload, err := client.UploadFileStream(ctx)
 
 	if err != nil {
@@ -105,17 +107,23 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, 
 		IpfsHash:   "",
 		UploadedAt: timestamppb.New(time.Now()),
 	}
-	//Byte stream can be encrypted here.
-	encryptedData, err := tinycrypt.EncryptByteStream("Password123", []byte("Something"))
 
-	if err != nil {
-		return err
-	}
+  data := make([]byte, fileSize)
+  _, err = fileData.Read(data)
 
-	if err := fileUpload.Send(&pufs_pb.UploadFileRequest{FileData: *encryptedData, FileMetadata: metadata}); err != nil {
-		log.Printf("Error sending file: %v", err)
-		return err
-	}
+  if err != nil {
+    return err
+  }
+  
+  // Chunk data and stream to server
+  tinychunk.Chunk(data, 2, func( data []byte) error {
+    if err := fileUpload.Send(&pufs_pb.UploadFileRequest{FileData: data, FileMetadata: metadata}); err != nil {
+      log.Printf("Error sending file: %v", err)
+      return err
+    }
+
+    return nil
+  })
 
 	return nil
 }
@@ -185,6 +193,7 @@ func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
 	return nil
 }
 
+// We must chunk the file here if its over the 4MB limit.
 func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
