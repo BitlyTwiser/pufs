@@ -12,9 +12,9 @@ import (
 	"path"
 	"time"
 
-  "github.com/BitlyTwiser/tinychunk"
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
-//	"github.com/BitlyTwiser/tinycrypt"
+	"github.com/BitlyTwiser/tinychunk"
+	//	"github.com/BitlyTwiser/tinycrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -25,7 +25,7 @@ var (
 	serverAddr = flag.String("addr", "127.0.0.1", "Server Address")
 	encrypt    = flag.Bool("e", true, "Encryptes uploaded files. True by default.")
 	password   = flag.String("pass", "Testing123@", "Password used to encrypt data")
-  id int64
+	id         int64
 )
 
 type Command struct {
@@ -92,8 +92,12 @@ func PufsClient() *Command {
 	return c
 }
 
-func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
-  log.Printf("Sending large file.. File Size: %v", fileSize)
+func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
+	log.Printf("Sending large file.. File Size: %v", fileSize)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	fileUpload, err := client.UploadFileStream(ctx)
 
 	if err != nil {
@@ -108,22 +112,27 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, 
 		UploadedAt: timestamppb.New(time.Now()),
 	}
 
-  data := make([]byte, fileSize)
-  _, err = fileData.Read(data)
+	data := make([]byte, fileSize)
+	_, err = fileData.Read(data)
 
-  if err != nil {
-    return err
-  }
-  
-  // Chunk data and stream to server
-  tinychunk.Chunk(data, 2, func( data []byte) error {
-    if err := fileUpload.Send(&pufs_pb.UploadFileRequest{FileData: data, FileMetadata: metadata}); err != nil {
-      log.Printf("Error sending file: %v", err)
-      return err
-    }
+	if err != nil {
+		return err
+	}
 
-    return nil
-  })
+	// Chunk data and stream to server
+	err = tinychunk.Chunk(data, 2, func(data []byte) error {
+		if err := fileUpload.Send(&pufs_pb.UploadFileRequest{FileData: data, FileMetadata: metadata}); err != nil {
+			log.Printf("Error sending file: %v", err)
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Error chunking and sending data: %v", err)
+		return err
+	}
 
 	return nil
 }
@@ -149,7 +158,7 @@ func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient) erro
 	//gRPC data size cap at 4MB
 	if fileSize >= (2 << 21) {
 		log.Println("Sending big file")
-		err = uploadFileStream(ctx, client, file, fileSize, fileName)
+		err = uploadFileStream(client, file, fileSize, fileName)
 
 		if err != nil {
 			return err
@@ -262,13 +271,12 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
 }
 
 // Listen for file changes realtime.
-// Client cancellation afte this function exits.
 // Take ID and store this upstream.
 func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Context) {
-    // Call function to remove the client from the subscription when client dies.
-    // Note:  This does NOT run. This would work if the client exited gracefully, however, we do not
-    // This is effectively an endless loop that checks for streams, so the only way to exist is to liste for an os exit event.
-    defer client.UnsubscribeFileStream(ctx, &pufs_pb.FilesRequest{Id: id})
+	// Call function to remove the client from the subscription when client dies.
+	// Note:  This does NOT run. This would work if the client exited gracefully, however, we do not
+	// This is effectively an endless loop that checks for streams, so the only way to exist is to liste for an os exit event.
+	defer client.UnsubscribeFileStream(ctx, &pufs_pb.FilesRequest{Id: id})
 
 	for {
 		stream, err := client.ListFilesEventStream(ctx, &pufs_pb.FilesRequest{Id: id})
@@ -305,11 +313,11 @@ func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Contex
 func main() {
 	flag.Parse()
 
-  // Set client ID
-  rand.Seed(time.Now().UTC().UnixNano())
-  
-  // Allow for up to 100 clients.
-  id = int64(rand.Intn(100))
+	// Set client ID
+	rand.Seed(time.Now().UTC().UnixNano())
+
+	// Allow for up to 100 clients.
+	id = int64(rand.Intn(100))
 
 	conn, err := grpc.Dial(fmt.Sprintf("%v:%v", *serverAddr, *serverPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 
@@ -356,7 +364,6 @@ func main() {
 		log.Println(*command.downloadData.name)
 
 		err = downloadFile(*command.downloadData.name, c)
-
 		if err != nil {
 			panic("Death downloading file")
 		}

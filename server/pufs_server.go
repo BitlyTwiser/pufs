@@ -49,18 +49,20 @@ type fileStream struct {
 
 // Must get this implemented
 func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
-
-  logger.Println("Uploading File steam from client")
+	logger.Println("Uploading File stream from client")
 
 	fileData, err := stream.Recv()
 
-  buffer := &bytes.Buffer{}
+	if err != nil {
+		logger.Printf("Error receiving dataset: %v", err)
+		return err
+	}
+
+	buffer := &bytes.Buffer{}
 
 	for {
-	  fileData, err := stream.Recv()
-    fileData.GetFileData()
+		fileData, err := stream.Recv()
+		fileData.GetFileData()
 
 		if err == io.EOF {
 			break
@@ -71,30 +73,29 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 			return err
 		}
 
-    buffer.Write(fileData.GetFileData())
-  }
+		buffer.Write(fileData.GetFileData())
+	}
 
-		logger.Printf("Uploading file name to IPFS: %v", fileData.GetFileMetadata().Filename)
-    
-    // Store full set of data into IPFS
-		ipfsHash, err := i.ipfsNode.UploadFileAndPin(buffer.Bytes())
+	logger.Printf("Uploading file name to IPFS: %v", fileData.GetFileMetadata().Filename)
 
-		if err != nil {
-			logger.Printf("error uploading file to IPFS. Error: %v", err)
-			return err
-		}
+	// Store full set of data into IPFS
+	ipfsHash, err := i.ipfsNode.UploadFileAndPin(buffer.Bytes())
 
-		i.fileSystem.Append(&ipfs.Node{Data: ipfs.FileData{
-			FileName:   fileData.GetFileMetadata().Filename,
-			FileSize:   fileData.GetFileMetadata().FileSize,
-			IpfsHash:   ipfsHash,
-			UploadedAt: fileData.GetFileMetadata().UploadedAt.AsTime().Unix(),
-		}})
+	if err != nil {
+		logger.Printf("error uploading file to IPFS. Error: %v", err)
+		return err
+	}
 
-		logger.Println("File added to virtual file system")
-	
+	i.fileSystem.Append(&ipfs.Node{Data: ipfs.FileData{
+		FileName:   fileData.GetFileMetadata().Filename,
+		FileSize:   fileData.GetFileMetadata().FileSize,
+		IpfsHash:   ipfsHash,
+		UploadedAt: fileData.GetFileMetadata().UploadedAt.AsTime().Unix(),
+	}})
 
-  return nil
+	logger.Println("File added to virtual file system")
+
+	return nil
 }
 
 //For files under the 4MB gRPC file size cap
@@ -166,10 +167,10 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 }
 
 func (i *IpfsServer) UnsubscribeFileStream(ctx context.Context, in *pufs_pb.FilesRequest) (*pufs_pb.UnsubscribeResponse, error) {
-  logger.Printf("Client with id: %v has disconnected", in.Id)
-  i.fileSub.fileEventSubs.Delete(in.Id)
+	logger.Printf("Client with id: %v has disconnected", in.Id)
+	i.fileSub.fileEventSubs.Delete(in.Id)
 
-  return &pufs_pb.UnsubscribeResponse{Successful: true}, nil
+	return &pufs_pb.UnsubscribeResponse{Successful: true}, nil
 }
 
 func (i *IpfsServer) ListFilesEventStream(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesEventStreamServer) error {

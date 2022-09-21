@@ -9,7 +9,7 @@ import (
 )
 
 func TestIPFS(t *testing.T) {
-	file, err := os.ReadFile("../testing/testing_files/test.txt")
+	file, err := os.ReadFile("../assets/testing_files/test.txt")
 	assert.Nil(t, err)
 
 	// A localfolder is necessary when creating the IpfsNode element.
