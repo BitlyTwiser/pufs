@@ -49,6 +49,9 @@ type fileStream struct {
 
 // Must get this implemented
 func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
 	logger.Println("Uploading File stream from client")
 
 	fileData, err := stream.Recv()
@@ -95,6 +98,11 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 
 	logger.Println("File added to virtual file system")
 
+  // Super hack to avoid blocking on file upload when no receivers.
+  if len(i.fileSub.eventsChannel) > 0 {
+    _ = <-i.fileSub.eventsChannel
+  }
+
 	i.fileSub.eventsChannel <- 1
 
 	return nil
@@ -122,6 +130,11 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 	}})
 
 	logger.Println("File added to virtual file system")
+  
+  // Super hack to avoid blocking on file upload when no receivers.
+  if len(i.fileSub.eventsChannel) > 0 {
+    _ = <-i.fileSub.eventsChannel
+  }
 
 	// Push bool into events channel to force refresh of file clients
 	i.fileSub.eventsChannel <- 1
