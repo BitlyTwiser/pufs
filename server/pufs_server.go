@@ -95,6 +95,8 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 
 	logger.Println("File added to virtual file system")
 
+	i.fileSub.eventsChannel <- 1
+
 	return nil
 }
 
