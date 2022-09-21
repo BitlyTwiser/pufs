@@ -12,6 +12,7 @@ service IpfsFileSystem {
   rpc ListFiles(FilesRequest) returns (stream FilesResponse) {}
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
   rpc ListFilesEventStream(FilesRequest) returns (stream FilesResponse) {}
+  rpc UnsubscribeFileStream(FilesRequest) returns (UnsubscribeResponse) {}
 }
 
 message UploadFileRequest {
@@ -21,6 +22,10 @@ message UploadFileRequest {
 
 message UploadFileResponse {
   bool sucessful = 1;
+}
+
+message UnsubscribeResponse {
+    bool Successful = 1;
 }
 
 message DownloadFileRequest {

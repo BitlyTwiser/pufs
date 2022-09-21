@@ -24,6 +24,7 @@ var (
 	serverAddr = flag.String("addr", "127.0.0.1", "Server Address")
 	encrypt    = flag.Bool("e", true, "Encryptes uploaded files. True by default.")
 	password   = flag.String("pass", "Testing123@", "Password used to encrypt data")
+  id int64
 )
 
 type Command struct {
@@ -155,7 +156,6 @@ func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient) erro
 			return err
 		}
 
-		// This shoudl all be tied to custom struct type
 		err = uploadFileData(ctx, client, fileData, fileSize, fileName)
 
 		if err != nil {
@@ -253,11 +253,16 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
 }
 
 // Listen for file changes realtime.
+// Client cancellation afte this function exits.
+// Take ID and store this upstream.
 func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Context) {
-	for {
-		rand.Seed(time.Now().UTC().UnixNano())
+    // Call function to remove the client from the subscription when client dies.
+    // Note:  This does NOT run. This would work if the client exited gracefully, however, we do not
+    // This is effectively an endless loop that checks for streams, so the only way to exist is to liste for an os exit event.
+    defer client.UnsubscribeFileStream(ctx, &pufs_pb.FilesRequest{Id: id})
 
-		stream, err := client.ListFilesEventStream(ctx, &pufs_pb.FilesRequest{Id: int64(rand.Intn(100))})
+	for {
+		stream, err := client.ListFilesEventStream(ctx, &pufs_pb.FilesRequest{Id: id})
 
 		// Retrun on failure
 		if err != nil || stream == nil {
@@ -290,6 +295,12 @@ func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Contex
 //Note: These are exmples of using the functions.
 func main() {
 	flag.Parse()
+
+  // Set client ID
+  rand.Seed(time.Now().UTC().UnixNano())
+  
+  // Allow for up to 100 clients.
+  id = int64(rand.Intn(100))
 
 	conn, err := grpc.Dial(fmt.Sprintf("%v:%v", *serverAddr, *serverPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 

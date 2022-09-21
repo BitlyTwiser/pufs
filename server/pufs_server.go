@@ -46,7 +46,8 @@ type fileStream struct {
 	stream pufs_pb.IpfsFileSystem_ListFilesServer
 }
 
-func (i *IpfsServer) StreamFile(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
+// Must get this implemented
+func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
@@ -150,6 +151,13 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 	}
 
 	return returnMetadata, nil
+}
+
+func (i *IpfsServer) UnsubscribeFileStream(ctx context.Context, in *pufs_pb.FilesRequest) (*pufs_pb.UnsubscribeResponse, error) {
+  logger.Printf("Client with id: %v has disconnected", in.Id)
+  i.fileSub.fileEventSubs.Delete(in.Id)
+
+  return &pufs_pb.UnsubscribeResponse{Successful: true}, nil
 }
 
 func (i *IpfsServer) ListFilesEventStream(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesEventStreamServer) error {
