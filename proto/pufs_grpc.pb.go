@@ -50,7 +50,7 @@ func (c *ipfsFileSystemClient) UploadFileStream(ctx context.Context, opts ...grp
 }
 
 type IpfsFileSystem_UploadFileStreamClient interface {
-	Send(*UploadFileRequest) error
+	Send(*UploadFileStreamRequest) error
 	CloseAndRecv() (*UploadFileResponse, error)
 	grpc.ClientStream
 }
@@ -59,7 +59,7 @@ type ipfsFileSystemUploadFileStreamClient struct {
 	grpc.ClientStream
 }
 
-func (x *ipfsFileSystemUploadFileStreamClient) Send(m *UploadFileRequest) error {
+func (x *ipfsFileSystemUploadFileStreamClient) Send(m *UploadFileStreamRequest) error {
 	return x.ClientStream.SendMsg(m)
 }
 
@@ -268,7 +268,7 @@ func _IpfsFileSystem_UploadFileStream_Handler(srv interface{}, stream grpc.Serve
 
 type IpfsFileSystem_UploadFileStreamServer interface {
 	SendAndClose(*UploadFileResponse) error
-	Recv() (*UploadFileRequest, error)
+	Recv() (*UploadFileStreamRequest, error)
 	grpc.ServerStream
 }
 
@@ -280,8 +280,8 @@ func (x *ipfsFileSystemUploadFileStreamServer) SendAndClose(m *UploadFileRespons
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *ipfsFileSystemUploadFileStreamServer) Recv() (*UploadFileRequest, error) {
-	m := new(UploadFileRequest)
+func (x *ipfsFileSystemUploadFileStreamServer) Recv() (*UploadFileStreamRequest, error) {
+	m := new(UploadFileStreamRequest)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}

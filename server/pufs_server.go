@@ -47,14 +47,15 @@ type fileStream struct {
 	stream pufs_pb.IpfsFileSystem_ListFilesServer
 }
 
-// Must get this implemented
+// I think this is failun due to the oneof value being needed in the protocl buffer
+// Look at implementing the thing.
 func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
 	logger.Println("Uploading File stream from client")
 
-	fileData, err := stream.Recv()
+	resp, err := stream.Recv()
 
 	if err != nil {
 		logger.Printf("Error receiving dataset: %v", err)
@@ -64,8 +65,7 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 	buffer := &bytes.Buffer{}
 
 	for {
-		fileData, err := stream.Recv()
-		fileData.GetFileData()
+		resp, err := stream.Recv()
 
 		if err == io.EOF {
 			break
@@ -76,10 +76,10 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 			return err
 		}
 
-		buffer.Write(fileData.GetFileData())
+		buffer.Write(resp.GetFileData())
 	}
 
-	logger.Printf("Uploading file name to IPFS: %v", fileData.GetFileMetadata().Filename)
+	logger.Printf("Uploading file name to IPFS: %v", resp.GetFileMetadata().Filename)
 
 	// Store full set of data into IPFS
 	ipfsHash, err := i.ipfsNode.UploadFileAndPin(buffer.Bytes())
@@ -90,10 +90,10 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 	}
 
 	i.fileSystem.Append(&ipfs.Node{Data: ipfs.FileData{
-		FileName:   fileData.GetFileMetadata().Filename,
-		FileSize:   fileData.GetFileMetadata().FileSize,
+		FileName:   resp.GetFileMetadata().Filename,
+		FileSize:   resp.GetFileMetadata().FileSize,
 		IpfsHash:   ipfsHash,
-		UploadedAt: fileData.GetFileMetadata().UploadedAt.AsTime().Unix(),
+		UploadedAt: resp.GetFileMetadata().UploadedAt.AsTime().Unix(),
 	}})
 
 	logger.Println("File added to virtual file system")

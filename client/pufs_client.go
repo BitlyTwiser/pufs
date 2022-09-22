@@ -92,11 +92,8 @@ func PufsClient() *Command {
 	return c
 }
 
-func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
+func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
 	log.Printf("Sending large file.. File Size: %v", fileSize)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	fileUpload, err := client.UploadFileStream(ctx)
 
@@ -119,9 +116,21 @@ func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fi
 		return err
 	}
 
+  log.Println("Sending first request")
+  // Send metadata request first then data.
+  m := &pufs_pb.UploadFileStreamRequest{Data: &pufs_pb.UploadFileStreamRequest_FileMetadata{
+    FileMetadata: metadata,
+  }}
+
+  if err := fileUpload.Send(m); err != nil {
+    log.Printf("Error sending first request: %v", err)
+  }
+
+  // Then send all other data after sending initial transmission.
 	// Chunk data and stream to server
-	err = tinychunk.Chunk(data, 2, func(data []byte) error {
-		if err := fileUpload.Send(&pufs_pb.UploadFileRequest{FileData: data, FileMetadata: metadata}); err != nil {
+	err = tinychunk.Chunk(data, 2, func(chunkedData []byte) error {
+    log.Println("Sending chunked data")
+    if err := fileUpload.Send(&pufs_pb.UploadFileStreamRequest{Data: &pufs_pb.UploadFileStreamRequest_FileData{FileData: chunkedData}}); err != nil {
 			log.Printf("Error sending file: %v", err)
 			return err
 		}
@@ -137,11 +146,8 @@ func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fi
 	return nil
 }
 
-func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient) error {
+func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient, ctx context.Context) error {
 	file, err := os.OpenFile(fmt.Sprintf("%v%v", path, fileName), os.O_RDONLY, 0400)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	if err != nil {
 		return err
@@ -158,7 +164,7 @@ func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient) erro
 	//gRPC data size cap at 4MB
 	if fileSize >= (2 << 21) {
 		log.Println("Sending big file")
-		err = uploadFileStream(client, file, fileSize, fileName)
+		err = uploadFileStream(ctx, client, file, fileSize, fileName)
 
 		if err != nil {
 			return err
@@ -183,10 +189,7 @@ func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient) erro
 	return nil
 }
 
-func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient, ctx context.Context) error {
 	resp, err := client.DeleteFile(ctx, &pufs_pb.DeleteFileRequest{FileName: fileName})
 
 	if err != nil {
@@ -203,9 +206,7 @@ func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
 }
 
 // We must chunk the file here if its over the 4MB limit.
-func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient, ctx context.Context) error {
 	log.Printf("Downliading file: %v", fileName)
 
 	fileResp, err := client.DownloadUncappedFile(ctx, &pufs_pb.DownloadFileRequest{FileName: fileName})
@@ -329,7 +330,6 @@ func main() {
 
 	c := pufs_pb.NewIpfsFileSystemClient(conn)
 	ctx, cancel := context.WithCancel(context.Background())
-
 	defer cancel()
 
 	if len(os.Args) < 2 {
@@ -342,7 +342,7 @@ func main() {
 	switch os.Args[1] {
 
 	case "upload":
-		log.Println("Uploading FIle")
+		log.Println("Uploading File")
 		command.uploadFs.Parse(os.Args[2:])
 
 		if *command.uploadData.path == "" {
@@ -352,8 +352,7 @@ func main() {
 
 		path, fileName := path.Split(*command.uploadData.path)
 
-		//if dir == "" assume "./" ?
-		err = uploadFile(path, fileName, c)
+		err = uploadFile(path, fileName, c, ctx)
 
 		if err != nil {
 			panic("Death thing while uploading")
@@ -363,7 +362,7 @@ func main() {
 		command.downloadFs.Parse(os.Args[2:])
 		log.Println(*command.downloadData.name)
 
-		err = downloadFile(*command.downloadData.name, c)
+		err = downloadFile(*command.downloadData.name, c, ctx)
 		if err != nil {
 			panic("Death downloading file")
 		}
@@ -372,7 +371,7 @@ func main() {
 		log.Printf("Deleting File: %v", *command.deleteData.name)
 
 		// Could also delete by IPFS hash
-		err = deleteFile(*command.deleteData.name, c)
+		err = deleteFile(*command.deleteData.name, c, ctx)
 
 		if err != nil {
 			panic("Death while deleting")
