@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+  "math"
 	"os"
 	"path"
 	"sync"
@@ -131,8 +132,11 @@ func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fi
   if err := fileUpload.Send(m); err != nil {
     log.Printf("Error sending first request: %v", err)
   }
+  
+  // Total chunks is utilized here to ensure we add enough wait groups.
+	totalChunks := uint(math.Floor(float64(fileSize) / float64((2 << 20))))
 
-  wg.Add(2)
+  wg.Add(int(totalChunks))
 	err = tinychunk.Chunk(data, 2, func(chunkedData []byte) error {
     defer wg.Done()
 
