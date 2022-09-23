@@ -10,10 +10,12 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"sync"
 	"time"
 
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
 	"github.com/BitlyTwiser/tinychunk"
+
 	//	"github.com/BitlyTwiser/tinycrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -92,8 +94,12 @@ func PufsClient() *Command {
 	return c
 }
 
-func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
+func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
+  var wg sync.WaitGroup
 	log.Printf("Sending large file.. File Size: %v", fileSize)
+  // Look to make the time variables depending on file size as well.
+  ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+  defer cancel()
 
 	fileUpload, err := client.UploadFileStream(ctx)
 
@@ -126,9 +132,10 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, 
     log.Printf("Error sending first request: %v", err)
   }
 
-  // Then send all other data after sending initial transmission.
-	// Chunk data and stream to server
+  wg.Add(2)
 	err = tinychunk.Chunk(data, 2, func(chunkedData []byte) error {
+    defer wg.Done()
+
     log.Println("Sending chunked data")
     if err := fileUpload.Send(&pufs_pb.UploadFileStreamRequest{Data: &pufs_pb.UploadFileStreamRequest_FileData{FileData: chunkedData}}); err != nil {
 			log.Printf("Error sending file: %v", err)
@@ -138,10 +145,25 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, 
 		return nil
 	})
 
+  wg.Wait()
+
 	if err != nil {
 		log.Printf("Error chunking and sending data: %v", err)
 		return err
 	}
+
+  resp, err := fileUpload.CloseAndRecv()
+
+  if err != nil {
+    log.Printf("No response from server")
+    return err
+  }
+
+  if resp.GetSucessful() {
+    log.Println("File has been uploaded")
+  } else {
+    return errors.New("Server did not say successful")
+  }
 
 	return nil
 }
@@ -164,7 +186,7 @@ func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient, ctx 
 	//gRPC data size cap at 4MB
 	if fileSize >= (2 << 21) {
 		log.Println("Sending big file")
-		err = uploadFileStream(ctx, client, file, fileSize, fileName)
+		err = uploadFileStream(client, file, fileSize, fileName)
 
 		if err != nil {
 			return err

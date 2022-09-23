@@ -19,7 +19,7 @@ message UploadFileStreamRequest {
   oneof data {
       File file_metadata = 1;
       bytes file_data = 2;
-    }
+    };
 }
 
 message UploadFileRequest {

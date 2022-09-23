@@ -47,8 +47,6 @@ type fileStream struct {
 	stream pufs_pb.IpfsFileSystem_ListFilesServer
 }
 
-// I think this is failun due to the oneof value being needed in the protocl buffer
-// Look at implementing the thing.
 func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
@@ -62,15 +60,26 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 		return err
 	}
 
+  logger.Printf("Initial requestreceived for file: %v", resp.GetFileMetadata().GetFilename())
+
 	buffer := &bytes.Buffer{}
 
 	for {
+    err := contextError(stream.Context())
+
+    if err != nil {
+      logger.Printf("Error in context: %v", err)
+      
+      return err
+    }
+
 		resp, err := stream.Recv()
 
 		if err == io.EOF {
 			break
 		}
 
+    logger.Printf("Size of file stream: %v", len(resp.GetFileData()))
 		if err != nil {
 			logger.Printf("Error receiving data from client. Error: %v", err)
 			return err
@@ -102,10 +111,24 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
   if len(i.fileSub.eventsChannel) > 0 {
     _ = <-i.fileSub.eventsChannel
   }
-
+  
+  // Push message that a file was uploaded in case we have subscribers
 	i.fileSub.eventsChannel <- 1
 
+  stream.SendAndClose(&pufs_pb.UploadFileResponse{Sucessful: true})
+
 	return nil
+}
+
+func contextError(ctx context.Context) error {
+	switch ctx.Err() {
+	case context.Canceled:
+		return errors.New("Context cancelled") 
+	case context.DeadlineExceeded:
+		return errors.New("Deadline has been exceded") 
+	default:
+		return nil
+	}
 }
 
 //For files under the 4MB gRPC file size cap
