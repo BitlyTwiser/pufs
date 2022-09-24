@@ -1,15 +1,30 @@
 package ipfs
 
 import (
+	"encoding/binary"
+	"encoding/json"
+	"io"
+
+	//  "time"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 )
 
 type FileData struct {
 	FileName   string
 	FileSize   int64
-	IpfsHash   string //There might be a special type we can import here for this
+	IpfsHash   string 
 	UploadedAt int64
+}
+
+// Fix these
+type FileDataSerialized struct {
+  FileName   string `json:"filename"`
+  FileSize   int64  `json:"filesize"`
+  IpfsHash   string `json:"ipfshash"`
+  UploadedAt int64 `json:"uploadedat"`
 }
 
 type Node struct {
@@ -24,7 +39,7 @@ type IpfsFiles struct {
 	tail   *Node
 }
 
-// Store directories. potentially in another list?
+// Store directories. Not used currently.  
 type IpfsDirectory struct {
 	name     string
 	contents []IpfsFiles
@@ -187,3 +202,78 @@ func (f *IpfsFiles) Remove(fileName string) {
 		tmp = tmp.next
 	}
 }
+
+// Writes file system data to disk
+func (f IpfsFiles) WriteFileSystemDataToDisk() error {
+  log.Println("Writing filesystem data to disk.")
+
+  file, err := os.OpenFile("../assets/backup_files/file-system-data.bin", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+
+  if err != nil {
+    return err
+  }
+  
+  for f.head != nil {
+    fileBytes, err := json.Marshal(f.head.Data)
+
+    if err != nil {
+      return err
+    }
+
+    buff := make([]byte, 4)
+    binary.LittleEndian.PutUint32(buff, uint32(len(fileBytes)))
+
+    _, err = file.Write(buff)
+    if err != nil {
+      return err
+    }
+
+    n, err := file.Write(fileBytes)
+
+    if err != nil { 
+      return err
+    } else if n == 0 {
+      return errors.New("zero bytes written to file!")
+    }
+
+    f.head = f.head.next
+  }
+
+  return nil
+}
+
+
+// Reads file system data from disk
+func (f IpfsFiles) LoadFileSystemData() error {
+  var buffData []FileDataSerialized
+  file, err := os.OpenFile("../assets/backup_files/file-system-data.bin", os.O_RDONLY, 0600)
+
+  if err != nil {
+    return err
+  }
+
+  buf := make([]byte, 4)
+  if _, err := io.ReadFull(file, buf); err != nil {
+    return err
+  }
+
+  size := binary.LittleEndian.Uint32(buf)
+
+  msg := make([]byte, size)
+  if _, err := io.ReadFull(file, msg); err != nil {
+    return err
+  }
+
+  err = json.Unmarshal(msg, &buffData) 
+
+  if err != nil {
+    return err
+  }
+  // Make these all nodes and append
+  for _, val := range buffData {
+    fmt.Println(val)
+  }
+
+  return nil
+}
+

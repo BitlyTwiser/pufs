@@ -9,6 +9,8 @@ import (
 )
 
 func TestIPFS(t *testing.T) {
+  t.Skip()
+
 	file, err := os.ReadFile("../assets/testing_files/test.txt")
 	assert.Nil(t, err)
 
@@ -71,4 +73,26 @@ func TestIPFS(t *testing.T) {
 
 	t.Log("Printing Files hosted on IPFS node after removal")
 	err = inode.ListFilesFromNode()
+}
+
+// Test dumping filesystem
+func TestFileSystemDump(t *testing.T) {
+	fileSystem := IpfsFiles{}
+
+	t.Log("Printing IPFS File system data")
+	fileSystem.Append(&Node{Data: FileData{"test.txt", 0, "ImmaHash", time.Now().Unix()}})
+	fileSystem.Append(&Node{Data: FileData{"anotherTest.txt", 0, "ImmaHash", time.Now().Unix()}})
+
+  err := fileSystem.WriteFileSystemDataToDisk()
+
+  assert.Nil(t, err)
+}
+
+// Test filesystem restore
+func TestFileSystemRestore(t *testing.T) {
+ fileSystem := IpfsFiles{}
+
+  err := fileSystem.LoadFileSystemData()
+
+  assert.Nil(t, err)
 }

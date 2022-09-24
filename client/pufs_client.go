@@ -134,6 +134,7 @@ func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fi
   }
   
   // Total chunks is utilized here to ensure we add enough wait groups.
+  // In this particular case, we are chunking the data into 2MB chunks. If alloted amount was altered, we would be forced to revisit this logic.
 	totalChunks := uint(math.Floor(float64(fileSize) / float64((2 << 20))))
 
   wg.Add(int(totalChunks))
