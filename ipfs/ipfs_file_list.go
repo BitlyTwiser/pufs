@@ -21,10 +21,10 @@ type FileData struct {
 
 // Fix these
 type FileDataSerialized struct {
-  FileName   string `json:"filename"`
-  FileSize   int64  `json:"filesize"`
-  IpfsHash   string `json:"ipfshash"`
-  UploadedAt int64 `json:"uploadedat"`
+  FileName   string `json:"FileName"`
+  FileSize   int64  `json:"FileSize"`
+  IpfsHash   string `json:"IpfsHash"`
+  UploadedAt int64 `json:"UploadedAt"`
 }
 
 type Node struct {
@@ -222,7 +222,8 @@ func (f IpfsFiles) WriteFileSystemDataToDisk() error {
 
     buff := make([]byte, 4)
     binary.LittleEndian.PutUint32(buff, uint32(len(fileBytes)))
-
+    
+    // Write empty buffer between messages.
     _, err = file.Write(buff)
     if err != nil {
       return err
@@ -244,34 +245,37 @@ func (f IpfsFiles) WriteFileSystemDataToDisk() error {
 
 
 // Reads file system data from disk
+// Split the file stream into the seperated chunks. Currently we only pull the initial set of values
 func (f IpfsFiles) LoadFileSystemData() error {
-  var buffData []FileDataSerialized
+  var buffData FileDataSerialized
   file, err := os.OpenFile("../assets/backup_files/file-system-data.bin", os.O_RDONLY, 0600)
 
   if err != nil {
     return err
   }
+  for {
+    // Read the delimiter value buffer
+    buf := make([]byte, 4)
+    _, err := io.ReadFull(file, buf)
+    
+    if err == io.EOF {
+      break
+    }
 
-  buf := make([]byte, 4)
-  if _, err := io.ReadFull(file, buf); err != nil {
-    return err
-  }
+    size := binary.LittleEndian.Uint32(buf)
 
-  size := binary.LittleEndian.Uint32(buf)
+    msg := make([]byte, size)
+    if _, err := io.ReadFull(file, msg); err != nil {
+      return err
+    }
 
-  msg := make([]byte, size)
-  if _, err := io.ReadFull(file, msg); err != nil {
-    return err
-  }
+    err = json.Unmarshal(msg, &buffData) 
 
-  err = json.Unmarshal(msg, &buffData) 
+    if err != nil {
+      return err
+    }
 
-  if err != nil {
-    return err
-  }
-  // Make these all nodes and append
-  for _, val := range buffData {
-    fmt.Println(val)
+    fmt.Println(buffData)
   }
 
   return nil
