@@ -1,11 +1,13 @@
 package ipfs_test
 
 import (
-	. "github.com/BitlyTwiser/pufs-server/ipfs"
-	"github.com/stretchr/testify/assert"
+	"log"
 	"os"
 	"testing"
 	"time"
+
+	. "github.com/BitlyTwiser/pufs-server/ipfs"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIPFS(t *testing.T) {
@@ -95,4 +97,12 @@ func TestFileSystemRestore(t *testing.T) {
   err := fileSystem.LoadFileSystemData()
 
   assert.Nil(t, err)
+  
+  log.Println("File system is not empty after restoration")
+  assert.NotEmpty(t, fileSystem.Files())
+
+  log.Println("Printing File system is after restoration")
+  for _, v := range fileSystem.Files() {
+    log.Println(v.Data.FileName)
+  }
 }

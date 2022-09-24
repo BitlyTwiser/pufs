@@ -245,8 +245,7 @@ func (f IpfsFiles) WriteFileSystemDataToDisk() error {
 
 
 // Reads file system data from disk
-// Split the file stream into the seperated chunks. Currently we only pull the initial set of values
-func (f IpfsFiles) LoadFileSystemData() error {
+func (f *IpfsFiles) LoadFileSystemData() error {
   var buffData FileDataSerialized
   file, err := os.OpenFile("../assets/backup_files/file-system-data.bin", os.O_RDONLY, 0600)
 
@@ -274,8 +273,15 @@ func (f IpfsFiles) LoadFileSystemData() error {
     if err != nil {
       return err
     }
-
-    fmt.Println(buffData)
+    
+    n := &Node{Data: FileData{
+      FileName: buffData.FileName,
+      FileSize: buffData.FileSize,
+      IpfsHash: buffData.IpfsHash,
+      UploadedAt: buffData.UploadedAt,
+    }}
+    
+    f.Append(n)
   }
 
   return nil
