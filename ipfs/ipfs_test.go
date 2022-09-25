@@ -11,7 +11,7 @@ import (
 )
 
 func TestIPFS(t *testing.T) {
-  t.Skip()
+	t.Skip()
 
 	file, err := os.ReadFile("../assets/testing_files/test.txt")
 	assert.Nil(t, err)
@@ -79,30 +79,30 @@ func TestIPFS(t *testing.T) {
 
 // Test dumping filesystem
 func TestFileSystemDump(t *testing.T) {
-  fileSystem := IpfsFiles{DataPath: "../assets/backup_files/file-system-data.bin"}
+	fileSystem := IpfsFiles{DataPath: "../assets/backup_files/file-system-data.bin"}
 
 	t.Log("Printing IPFS File system data")
 	fileSystem.Append(&Node{Data: FileData{"test.txt", 0, "ImmaHash", time.Now().Unix()}})
 	fileSystem.Append(&Node{Data: FileData{"anotherTest.txt", 0, "ImmaHash", time.Now().Unix()}})
 
-  err := fileSystem.WriteFileSystemDataToDisk()
+	err := fileSystem.WriteFileSystemDataToDisk()
 
-  assert.Nil(t, err)
+	assert.Nil(t, err)
 }
 
 // Test filesystem restore
 func TestFileSystemRestore(t *testing.T) {
-  fileSystem := IpfsFiles{DataPath: "../assets/backup_files/file-system-data.bin"}
+	fileSystem := IpfsFiles{DataPath: "../assets/backup_files/file-system-data.bin"}
 
-  err := fileSystem.LoadFileSystemData()
+	err := fileSystem.LoadFileSystemData()
 
-  assert.Nil(t, err)
-  
-  log.Println("File system is not empty after restoration")
-  assert.NotEmpty(t, fileSystem.Files())
+	assert.Nil(t, err)
 
-  log.Println("Printing File system is after restoration")
-  for _, v := range fileSystem.Files() {
-    log.Println(v.Data.FileName)
-  }
+	log.Println("File system is not empty after restoration")
+	assert.NotEmpty(t, fileSystem.Files())
+
+	log.Println("Printing File system is after restoration")
+	for _, v := range fileSystem.Files() {
+		log.Println(v.Data.FileName)
+	}
 }

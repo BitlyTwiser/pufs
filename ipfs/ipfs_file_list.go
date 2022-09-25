@@ -15,16 +15,16 @@ import (
 type FileData struct {
 	FileName   string
 	FileSize   int64
-	IpfsHash   string 
+	IpfsHash   string
 	UploadedAt int64
 }
 
 // Fix these
 type FileDataSerialized struct {
-  FileName   string `json:"FileName"`
-  FileSize   int64  `json:"FileSize"`
-  IpfsHash   string `json:"IpfsHash"`
-  UploadedAt int64 `json:"UploadedAt"`
+	FileName   string `json:"FileName"`
+	FileSize   int64  `json:"FileSize"`
+	IpfsHash   string `json:"IpfsHash"`
+	UploadedAt int64  `json:"UploadedAt"`
 }
 
 type Node struct {
@@ -34,13 +34,13 @@ type Node struct {
 }
 
 type IpfsFiles struct {
-	length int
-  DataPath string
-	head   *Node
-	tail   *Node
+	length   int
+	DataPath string
+	head     *Node
+	tail     *Node
 }
 
-// Store directories. Not used currently.  
+// Store directories. Not used currently.
 type IpfsDirectory struct {
 	name     string
 	contents []IpfsFiles
@@ -206,85 +206,83 @@ func (f *IpfsFiles) Remove(fileName string) {
 
 // Writes file system data to disk
 func (f IpfsFiles) WriteFileSystemDataToDisk() error {
-  log.Println("Writing filesystem data to disk.")
+	log.Println("Writing filesystem data to disk.")
 
-  file, err := os.OpenFile(f.DataPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+	file, err := os.OpenFile(f.DataPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
 
-  if err != nil {
-    return err
-  }
-  
-  for f.head != nil {
-    fileBytes, err := json.Marshal(f.head.Data)
+	if err != nil {
+		return err
+	}
 
-    if err != nil {
-      return err
-    }
+	for f.head != nil {
+		fileBytes, err := json.Marshal(f.head.Data)
 
-    buff := make([]byte, 4)
-    binary.LittleEndian.PutUint32(buff, uint32(len(fileBytes)))
-    
-    // Write empty buffer between messages.
-    _, err = file.Write(buff)
-    if err != nil {
-      return err
-    }
+		if err != nil {
+			return err
+		}
 
-    n, err := file.Write(fileBytes)
+		buff := make([]byte, 4)
+		binary.LittleEndian.PutUint32(buff, uint32(len(fileBytes)))
 
-    if err != nil { 
-      return err
-    } else if n == 0 {
-      return errors.New("zero bytes written to file!")
-    }
+		// Write empty buffer between messages.
+		_, err = file.Write(buff)
+		if err != nil {
+			return err
+		}
 
-    f.head = f.head.next
-  }
+		n, err := file.Write(fileBytes)
 
-  return nil
+		if err != nil {
+			return err
+		} else if n == 0 {
+			return errors.New("zero bytes written to file!")
+		}
+
+		f.head = f.head.next
+	}
+
+	return nil
 }
-
 
 // Reads file system data from disk
 func (f *IpfsFiles) LoadFileSystemData() error {
-  var buffData FileDataSerialized
-  file, err := os.OpenFile(f.DataPath, os.O_RDONLY, 0600)
+	var buffData FileDataSerialized
+	file, err := os.OpenFile(f.DataPath, os.O_RDONLY, 0600)
 
-  if err != nil {
-    return err
-  }
-  for {
-    // Read the delimiter value buffer
-    buf := make([]byte, 4)
-    _, err := io.ReadFull(file, buf)
-    
-    if err == io.EOF {
-      break
-    }
+	if err != nil {
+		return err
+	}
+	for {
+		// Read the delimiter value buffer
+		buf := make([]byte, 4)
+		_, err := io.ReadFull(file, buf)
 
-    size := binary.LittleEndian.Uint32(buf)
+		if err == io.EOF {
+			break
+		}
 
-    msg := make([]byte, size)
-    if _, err := io.ReadFull(file, msg); err != nil {
-      return err
-    }
+		size := binary.LittleEndian.Uint32(buf)
 
-    err = json.Unmarshal(msg, &buffData) 
+		msg := make([]byte, size)
+		if _, err := io.ReadFull(file, msg); err != nil {
+			return err
+		}
 
-    if err != nil {
-      return err
-    }
-    
-    n := &Node{Data: FileData{
-      FileName: buffData.FileName,
-      FileSize: buffData.FileSize,
-      IpfsHash: buffData.IpfsHash,
-      UploadedAt: buffData.UploadedAt,
-    }}
-    
-    f.Append(n)
-  }
+		err = json.Unmarshal(msg, &buffData)
 
-  return nil
+		if err != nil {
+			return err
+		}
+
+		n := &Node{Data: FileData{
+			FileName:   buffData.FileName,
+			FileSize:   buffData.FileSize,
+			IpfsHash:   buffData.IpfsHash,
+			UploadedAt: buffData.UploadedAt,
+		}}
+
+		f.Append(n)
+	}
+
+	return nil
 }
-

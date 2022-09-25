@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand"
-  "math"
 	"os"
 	"path"
 	"sync"
@@ -96,11 +96,11 @@ func PufsClient() *Command {
 }
 
 func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
-  var wg sync.WaitGroup
+	var wg sync.WaitGroup
 	log.Printf("Sending large file.. File Size: %v", fileSize)
-  // Look to make the time variables depending on file size as well.
-  ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-  defer cancel()
+	// Look to make the time variables depending on file size as well.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	fileUpload, err := client.UploadFileStream(ctx)
 
@@ -123,26 +123,26 @@ func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fi
 		return err
 	}
 
-  log.Println("Sending first request")
-  // Send metadata request first then data.
-  m := &pufs_pb.UploadFileStreamRequest{Data: &pufs_pb.UploadFileStreamRequest_FileMetadata{
-    FileMetadata: metadata,
-  }}
+	log.Println("Sending first request")
+	// Send metadata request first then data.
+	m := &pufs_pb.UploadFileStreamRequest{Data: &pufs_pb.UploadFileStreamRequest_FileMetadata{
+		FileMetadata: metadata,
+	}}
 
-  if err := fileUpload.Send(m); err != nil {
-    log.Printf("Error sending first request: %v", err)
-  }
-  
-  // Total chunks is utilized here to ensure we add enough wait groups.
-  // In this particular case, we are chunking the data into 2MB chunks. If alloted amount was altered, we would be forced to revisit this logic.
+	if err := fileUpload.Send(m); err != nil {
+		log.Printf("Error sending first request: %v", err)
+	}
+
+	// Total chunks is utilized here to ensure we add enough wait groups.
+	// In this particular case, we are chunking the data into 2MB chunks. If alloted amount was altered, we would be forced to revisit this logic.
 	totalChunks := uint(math.Floor(float64(fileSize) / float64((2 << 20))))
 
-  wg.Add(int(totalChunks))
+	wg.Add(int(totalChunks))
 	err = tinychunk.Chunk(data, 2, func(chunkedData []byte) error {
-    defer wg.Done()
+		defer wg.Done()
 
-    log.Println("Sending chunked data")
-    if err := fileUpload.Send(&pufs_pb.UploadFileStreamRequest{Data: &pufs_pb.UploadFileStreamRequest_FileData{FileData: chunkedData}}); err != nil {
+		log.Println("Sending chunked data")
+		if err := fileUpload.Send(&pufs_pb.UploadFileStreamRequest{Data: &pufs_pb.UploadFileStreamRequest_FileData{FileData: chunkedData}}); err != nil {
 			log.Printf("Error sending file: %v", err)
 			return err
 		}
@@ -150,25 +150,25 @@ func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fi
 		return nil
 	})
 
-  wg.Wait()
+	wg.Wait()
 
 	if err != nil {
 		log.Printf("Error chunking and sending data: %v", err)
 		return err
 	}
 
-  resp, err := fileUpload.CloseAndRecv()
+	resp, err := fileUpload.CloseAndRecv()
 
-  if err != nil {
-    log.Printf("No response from server")
-    return err
-  }
+	if err != nil {
+		log.Printf("No response from server")
+		return err
+	}
 
-  if resp.GetSucessful() {
-    log.Println("File has been uploaded")
-  } else {
-    return errors.New("Server did not say successful")
-  }
+	if resp.GetSucessful() {
+		log.Println("File has been uploaded")
+	} else {
+		return errors.New("Server did not say successful")
+	}
 
 	return nil
 }

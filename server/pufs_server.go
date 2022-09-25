@@ -20,11 +20,11 @@ import (
 )
 
 var (
-	port        = flag.String("port", "9000", "Set designated server port. Ensure that this will match with client")
-	logPath     = flag.String("lp", "./", "Default logging path. Can be overriden.")
-	logFileName = flag.String("lfn", "output.log", "Default logging file name. Can be overriden")
-  fileSystemData = flag.String("df", "./assets/backup_files/file-system-data.bin", "Default location for data to be written.")
-  delFileSystemData = flag.Bool("rd", false, "Delete stored data when server reboots")
+	port              = flag.String("port", "9000", "Set designated server port. Ensure that this will match with client")
+	logPath           = flag.String("lp", "./", "Default logging path. Can be overriden.")
+	logFileName       = flag.String("lfn", "output.log", "Default logging file name. Can be overriden")
+	fileSystemData    = flag.String("df", "./assets/backup_files/file-system-data.bin", "Default location for data to be written.")
+	delFileSystemData = flag.Bool("rd", false, "Delete stored data when server reboots")
 )
 
 var (
@@ -62,18 +62,18 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 		return err
 	}
 
-  logger.Printf("Initial requestreceived for file: %v", resp.GetFileMetadata().GetFilename())
+	logger.Printf("Initial requestreceived for file: %v", resp.GetFileMetadata().GetFilename())
 
 	buffer := &bytes.Buffer{}
 
 	for {
-    err := contextError(stream.Context())
+		err := contextError(stream.Context())
 
-    if err != nil {
-      logger.Printf("Error in context: %v", err)
-      
-      return err
-    }
+		if err != nil {
+			logger.Printf("Error in context: %v", err)
+
+			return err
+		}
 
 		resp, err := stream.Recv()
 
@@ -81,7 +81,7 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 			break
 		}
 
-    logger.Printf("Size of file stream: %v", len(resp.GetFileData()))
+		logger.Printf("Size of file stream: %v", len(resp.GetFileData()))
 		if err != nil {
 			logger.Printf("Error receiving data from client. Error: %v", err)
 			return err
@@ -109,15 +109,15 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 
 	logger.Println("File added to virtual file system")
 
-  // Super hack to avoid blocking on file upload when no receivers.
-  if len(i.fileSub.eventsChannel) > 0 {
-    _ = <-i.fileSub.eventsChannel
-  }
-  
-  // Push message that a file was uploaded in case we have subscribers
+	// Super hack to avoid blocking on file upload when no receivers.
+	if len(i.fileSub.eventsChannel) > 0 {
+		_ = <-i.fileSub.eventsChannel
+	}
+
+	// Push message that a file was uploaded in case we have subscribers
 	i.fileSub.eventsChannel <- 1
 
-  stream.SendAndClose(&pufs_pb.UploadFileResponse{Sucessful: true})
+	stream.SendAndClose(&pufs_pb.UploadFileResponse{Sucessful: true})
 
 	return nil
 }
@@ -125,9 +125,9 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 func contextError(ctx context.Context) error {
 	switch ctx.Err() {
 	case context.Canceled:
-		return errors.New("Context cancelled") 
+		return errors.New("Context cancelled")
 	case context.DeadlineExceeded:
-		return errors.New("Deadline has been exceded") 
+		return errors.New("Deadline has been exceded")
 	default:
 		return nil
 	}
@@ -155,11 +155,11 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 	}})
 
 	logger.Println("File added to virtual file system")
-  
-  // Super hack to avoid blocking on file upload when no receivers.
-  if len(i.fileSub.eventsChannel) > 0 {
-    _ = <-i.fileSub.eventsChannel
-  }
+
+	// Super hack to avoid blocking on file upload when no receivers.
+	if len(i.fileSub.eventsChannel) > 0 {
+		_ = <-i.fileSub.eventsChannel
+	}
 
 	// Push bool into events channel to force refresh of file clients
 	i.fileSub.eventsChannel <- 1
@@ -345,21 +345,21 @@ func main() {
 	defer cancel()
 
 	// Setup virtual File sytem.
-  fileSystem := ipfs.IpfsFiles{DataPath: *fileSystemData}
-  
-  // If the user desires to delete the filesystem and start anew.
-  if *delFileSystemData {
-    if err := os.Remove(*fileSystemData); err != nil {
-      logger.Printf("Error deleting fileSystem data file! You may want to check this manually. Error: %v", err)
-    }
-  } else {
-    logger.Printf("Loading existing file data from %v", *fileSystemData)
-    err := fileSystem.LoadFileSystemData() 
+	fileSystem := ipfs.IpfsFiles{DataPath: *fileSystemData}
 
-    if err != nil {
-      fmt.Println("Error loading filesystem data from given location: %v. You may want to check this! Error: %v", *fileSystemData, err)
-    }
-  }
+	// If the user desires to delete the filesystem and start anew.
+	if *delFileSystemData {
+		if err := os.Remove(*fileSystemData); err != nil {
+			logger.Printf("Error deleting fileSystem data file! You may want to check this manually. Error: %v", err)
+		}
+	} else {
+		logger.Printf("Loading existing file data from %v", *fileSystemData)
+		err := fileSystem.LoadFileSystemData()
+
+		if err != nil {
+			fmt.Println("Error loading filesystem data from given location: %v. You may want to check this! Error: %v", *fileSystemData, err)
+		}
+	}
 
 	var opts []grpc.ServerOption
 	logger.Printf("Server starting, address: localhost:%v\nLogger started: Logging to path: %v", *port, *logPath)
