@@ -23,6 +23,8 @@ var (
 	port        = flag.String("port", "9000", "Set designated server port. Ensure that this will match with client")
 	logPath     = flag.String("lp", "./", "Default logging path. Can be overriden.")
 	logFileName = flag.String("lfn", "output.log", "Default logging file name. Can be overriden")
+  fileSystemData = flag.String("df", "./assets/backup_files/file-system-data.bin", "Default location for data to be written.")
+  delFileSystemData = flag.Bool("rd", false, "Delete stored data when server reboots")
 )
 
 var (
@@ -343,7 +345,21 @@ func main() {
 	defer cancel()
 
 	// Setup virtual File sytem.
-	fileSystem := ipfs.IpfsFiles{}
+  fileSystem := ipfs.IpfsFiles{DataPath: *fileSystemData}
+  
+  // If the user desires to delete the filesystem and start anew.
+  if *delFileSystemData {
+    if err := os.Remove(*fileSystemData); err != nil {
+      logger.Printf("Error deleting fileSystem data file! You may want to check this manually. Error: %v", err)
+    }
+  } else {
+    logger.Printf("Loading existing file data from %v", *fileSystemData)
+    err := fileSystem.LoadFileSystemData() 
+
+    if err != nil {
+      fmt.Println("Error loading filesystem data from given location: %v. You may want to check this! Error: %v", *fileSystemData, err)
+    }
+  }
 
 	var opts []grpc.ServerOption
 	logger.Printf("Server starting, address: localhost:%v\nLogger started: Logging to path: %v", *port, *logPath)

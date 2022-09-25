@@ -79,7 +79,7 @@ func TestIPFS(t *testing.T) {
 
 // Test dumping filesystem
 func TestFileSystemDump(t *testing.T) {
-	fileSystem := IpfsFiles{}
+  fileSystem := IpfsFiles{DataPath: "../assets/backup_files/file-system-data.bin"}
 
 	t.Log("Printing IPFS File system data")
 	fileSystem.Append(&Node{Data: FileData{"test.txt", 0, "ImmaHash", time.Now().Unix()}})
@@ -92,7 +92,7 @@ func TestFileSystemDump(t *testing.T) {
 
 // Test filesystem restore
 func TestFileSystemRestore(t *testing.T) {
- fileSystem := IpfsFiles{}
+  fileSystem := IpfsFiles{DataPath: "../assets/backup_files/file-system-data.bin"}
 
   err := fileSystem.LoadFileSystemData()
 
