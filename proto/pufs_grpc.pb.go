@@ -99,7 +99,7 @@ func (c *ipfsFileSystemClient) DownloadFile(ctx context.Context, in *DownloadFil
 }
 
 type IpfsFileSystem_DownloadFileClient interface {
-	Recv() (*DownloadFileResponse, error)
+	Recv() (*DownloadFileResponseStream, error)
 	grpc.ClientStream
 }
 
@@ -107,8 +107,8 @@ type ipfsFileSystemDownloadFileClient struct {
 	grpc.ClientStream
 }
 
-func (x *ipfsFileSystemDownloadFileClient) Recv() (*DownloadFileResponse, error) {
-	m := new(DownloadFileResponse)
+func (x *ipfsFileSystemDownloadFileClient) Recv() (*DownloadFileResponseStream, error) {
+	m := new(DownloadFileResponseStream)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -315,7 +315,7 @@ func _IpfsFileSystem_DownloadFile_Handler(srv interface{}, stream grpc.ServerStr
 }
 
 type IpfsFileSystem_DownloadFileServer interface {
-	Send(*DownloadFileResponse) error
+	Send(*DownloadFileResponseStream) error
 	grpc.ServerStream
 }
 
@@ -323,7 +323,7 @@ type ipfsFileSystemDownloadFileServer struct {
 	grpc.ServerStream
 }
 
-func (x *ipfsFileSystemDownloadFileServer) Send(m *DownloadFileResponse) error {
+func (x *ipfsFileSystemDownloadFileServer) Send(m *DownloadFileResponseStream) error {
 	return x.ServerStream.SendMsg(m)
 }
 

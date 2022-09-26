@@ -7,7 +7,7 @@ option go_package = "github.com/BitlyTwiser/pufs-server/proto";
 service IpfsFileSystem {
   rpc UploadFileStream(stream UploadFileStreamRequest) returns (UploadFileResponse) {};
   rpc UploadFile(UploadFileRequest) returns (UploadFileResponse) {};
-  rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse) {};
+  rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponseStream) {};
   rpc DownloadUncappedFile(DownloadFileRequest) returns (DownloadFileResponse) {};
   rpc ListFiles(FilesRequest) returns (stream FilesResponse) {};
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {};
@@ -37,6 +37,13 @@ message UnsubscribeResponse {
 
 message DownloadFileRequest {
   string file_name = 1;
+}
+
+message DownloadFileResponseStream {
+  oneof data {
+      bytes file_data = 1;
+      File file_metadata = 2;
+    }
 }
 
 message DownloadFileResponse {
