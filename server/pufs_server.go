@@ -357,7 +357,7 @@ func main() {
 		err := fileSystem.LoadFileSystemData()
 
 		if err != nil {
-			fmt.Println("Error loading filesystem data from given location: %v. You may want to check this! Error: %v", *fileSystemData, err)
+			fmt.Printf("Error loading filesystem data from given location: %v. You may want to check this! Error: %v", *fileSystemData, err)
 		}
 	}
 
