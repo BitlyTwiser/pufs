@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -19,9 +20,11 @@ import (
 )
 
 var (
-	port        = flag.String("port", "9000", "Set designated server port. Ensure that this will match with client")
-	logPath     = flag.String("lp", "./", "Default logging path. Can be overriden.")
-	logFileName = flag.String("lfn", "output.log", "Default logging file name. Can be overriden")
+	port              = flag.String("port", "9000", "Set designated server port. Ensure that this will match with client")
+	logPath           = flag.String("lp", "./", "Default logging path. Can be overriden.")
+	logFileName       = flag.String("lfn", "output.log", "Default logging file name. Can be overriden")
+	fileSystemData    = flag.String("df", "./assets/backup_files/file-system-data.bin", "Default location for data to be written.")
+	delFileSystemData = flag.Bool("rd", false, "Delete stored data when server reboots")
 )
 
 var (
@@ -46,42 +49,87 @@ type fileStream struct {
 	stream pufs_pb.IpfsFileSystem_ListFilesServer
 }
 
-// Must get this implemented
 func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-	logger.Println("Uploading File from client")
+	logger.Println("Uploading File stream from client")
+
+	resp, err := stream.Recv()
+
+	if err != nil {
+		logger.Printf("Error receiving dataset: %v", err)
+		return err
+	}
+
+	logger.Printf("Initial requestreceived for file: %v", resp.GetFileMetadata().GetFilename())
+
+	buffer := &bytes.Buffer{}
 
 	for {
-		fileData, err := stream.Recv()
+		err := contextError(stream.Context())
 
-		if err == io.EOF {
-			return nil
+		if err != nil {
+			logger.Printf("Error in context: %v", err)
+
+			return err
 		}
 
+		resp, err := stream.Recv()
+
+		if err == io.EOF {
+			break
+		}
+
+		logger.Printf("Size of file stream: %v", len(resp.GetFileData()))
 		if err != nil {
 			logger.Printf("Error receiving data from client. Error: %v", err)
 			return err
 		}
 
-		logger.Printf("Uploading file name to IPFS: %v", fileData.FileMetadata.Filename)
+		buffer.Write(resp.GetFileData())
+	}
 
-		ipfsHash, err := i.ipfsNode.UploadFileAndPin(&fileData.FileData)
+	logger.Printf("Uploading file name to IPFS: %v", resp.GetFileMetadata().Filename)
 
-		if err != nil {
-			logger.Printf("error uploading file to IPFS. Error: %v", err)
-			return err
-		}
+	// Store full set of data into IPFS
+	ipfsHash, err := i.ipfsNode.UploadFileAndPin(buffer.Bytes())
 
-		i.fileSystem.Append(&ipfs.Node{Data: ipfs.FileData{
-			FileName:   fileData.FileMetadata.Filename,
-			FileSize:   fileData.FileMetadata.FileSize,
-			IpfsHash:   ipfsHash,
-			UploadedAt: fileData.FileMetadata.UploadedAt.AsTime().Unix(),
-		}})
+	if err != nil {
+		logger.Printf("error uploading file to IPFS. Error: %v", err)
+		return err
+	}
 
-		logger.Println("File added to virtual file system")
+	i.fileSystem.Append(&ipfs.Node{Data: ipfs.FileData{
+		FileName:   resp.GetFileMetadata().Filename,
+		FileSize:   resp.GetFileMetadata().FileSize,
+		IpfsHash:   ipfsHash,
+		UploadedAt: resp.GetFileMetadata().UploadedAt.AsTime().Unix(),
+	}})
+
+	logger.Println("File added to virtual file system")
+
+	// Super hack to avoid blocking on file upload when no receivers.
+	if len(i.fileSub.eventsChannel) > 0 {
+		_ = <-i.fileSub.eventsChannel
+	}
+
+	// Push message that a file was uploaded in case we have subscribers
+	i.fileSub.eventsChannel <- 1
+
+	stream.SendAndClose(&pufs_pb.UploadFileResponse{Sucessful: true})
+
+	return nil
+}
+
+func contextError(ctx context.Context) error {
+	switch ctx.Err() {
+	case context.Canceled:
+		return errors.New("Context cancelled")
+	case context.DeadlineExceeded:
+		return errors.New("Deadline has been exceded")
+	default:
+		return nil
 	}
 }
 
@@ -92,7 +140,7 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 
 	logger.Printf("Uploading file name to IPFS: %v", fileData.FileMetadata.Filename)
 
-	ipfsHash, err := i.ipfsNode.UploadFileAndPin(&fileData.FileData)
+	ipfsHash, err := i.ipfsNode.UploadFileAndPin(fileData.FileData)
 
 	if err != nil {
 		logger.Printf("error uploading file to IPFS. Error: %v", err)
@@ -107,6 +155,11 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 	}})
 
 	logger.Println("File added to virtual file system")
+
+	// Super hack to avoid blocking on file upload when no receivers.
+	if len(i.fileSub.eventsChannel) > 0 {
+		_ = <-i.fileSub.eventsChannel
+	}
 
 	// Push bool into events channel to force refresh of file clients
 	i.fileSub.eventsChannel <- 1
@@ -154,10 +207,10 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 }
 
 func (i *IpfsServer) UnsubscribeFileStream(ctx context.Context, in *pufs_pb.FilesRequest) (*pufs_pb.UnsubscribeResponse, error) {
-  logger.Printf("Client with id: %v has disconnected", in.Id)
-  i.fileSub.fileEventSubs.Delete(in.Id)
+	logger.Printf("Client with id: %v has disconnected", in.Id)
+	i.fileSub.fileEventSubs.Delete(in.Id)
 
-  return &pufs_pb.UnsubscribeResponse{Successful: true}, nil
+	return &pufs_pb.UnsubscribeResponse{Successful: true}, nil
 }
 
 func (i *IpfsServer) ListFilesEventStream(in *pufs_pb.FilesRequest, stream pufs_pb.IpfsFileSystem_ListFilesEventStreamServer) error {
@@ -292,7 +345,21 @@ func main() {
 	defer cancel()
 
 	// Setup virtual File sytem.
-	fileSystem := ipfs.IpfsFiles{}
+	fileSystem := ipfs.IpfsFiles{DataPath: *fileSystemData}
+
+	// If the user desires to delete the filesystem and start anew.
+	if *delFileSystemData {
+		if err := os.Remove(*fileSystemData); err != nil {
+			logger.Printf("Error deleting fileSystem data file! You may want to check this manually. Error: %v", err)
+		}
+	} else {
+		logger.Printf("Loading existing file data from %v", *fileSystemData)
+		err := fileSystem.LoadFileSystemData()
+
+		if err != nil {
+			fmt.Printf("Error loading filesystem data from given location: %v. You may want to check this! Error: %v", *fileSystemData, err)
+		}
+	}
 
 	var opts []grpc.ServerOption
 	logger.Printf("Server starting, address: localhost:%v\nLogger started: Logging to path: %v", *port, *logPath)

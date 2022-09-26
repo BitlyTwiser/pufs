@@ -3,7 +3,7 @@ module github.com/BitlyTwiser/pufs-server
 go 1.18
 
 require (
-	github.com/BitlyTwiser/tinycrypt v1.0.0
+	github.com/BitlyTwiser/tinychunk v1.0.0
 	github.com/golang/protobuf v1.5.2
 	github.com/ipfs/go-ipfs-files v0.1.1
 	github.com/ipfs/interface-go-ipfs-core v0.7.0

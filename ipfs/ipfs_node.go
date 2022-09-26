@@ -127,8 +127,8 @@ func (i *IpfsNode) DeleteFile(ipfsFileHash string) error {
 }
 
 //This can take a raw stream of bytes. As the gRPC server accumulates bytes via the client, we can write the file to IPFS.
-func (i *IpfsNode) UploadFileAndPin(fileStream *[]byte) (string, error) {
-	p, err := i.api.Unixfs().Add(i.ctx, files.NewBytesFile(*fileStream))
+func (i *IpfsNode) UploadFileAndPin(fileStream []byte) (string, error) {
+	p, err := i.api.Unixfs().Add(i.ctx, files.NewBytesFile(fileStream))
 
 	if err != nil {
 		return "", err

@@ -7,13 +7,17 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"path"
+	"sync"
 	"time"
 
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
-	"github.com/BitlyTwiser/tinycrypt"
+	"github.com/BitlyTwiser/tinychunk"
+
+	//	"github.com/BitlyTwiser/tinycrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,7 +28,7 @@ var (
 	serverAddr = flag.String("addr", "127.0.0.1", "Server Address")
 	encrypt    = flag.Bool("e", true, "Encryptes uploaded files. True by default.")
 	password   = flag.String("pass", "Testing123@", "Password used to encrypt data")
-  id int64
+	id         int64
 )
 
 type Command struct {
@@ -91,7 +95,13 @@ func PufsClient() *Command {
 	return c
 }
 
-func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
+func uploadFileStream(client pufs_pb.IpfsFileSystemClient, fileData *os.File, fileSize int64, fileName string) error {
+	var wg sync.WaitGroup
+	log.Printf("Sending large file.. File Size: %v", fileSize)
+	// Look to make the time variables depending on file size as well.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	fileUpload, err := client.UploadFileStream(ctx)
 
 	if err != nil {
@@ -105,26 +115,66 @@ func uploadFileStream(ctx context.Context, client pufs_pb.IpfsFileSystemClient, 
 		IpfsHash:   "",
 		UploadedAt: timestamppb.New(time.Now()),
 	}
-	//Byte stream can be encrypted here.
-	encryptedData, err := tinycrypt.EncryptByteStream("Password123", []byte("Something"))
+
+	data := make([]byte, fileSize)
+	_, err = fileData.Read(data)
 
 	if err != nil {
 		return err
 	}
 
-	if err := fileUpload.Send(&pufs_pb.UploadFileRequest{FileData: *encryptedData, FileMetadata: metadata}); err != nil {
-		log.Printf("Error sending file: %v", err)
+	log.Println("Sending first request")
+	// Send metadata request first then data.
+	m := &pufs_pb.UploadFileStreamRequest{Data: &pufs_pb.UploadFileStreamRequest_FileMetadata{
+		FileMetadata: metadata,
+	}}
+
+	if err := fileUpload.Send(m); err != nil {
+		log.Printf("Error sending first request: %v", err)
+	}
+
+	// Total chunks is utilized here to ensure we add enough wait groups.
+	// In this particular case, we are chunking the data into 2MB chunks. If alloted amount was altered, we would be forced to revisit this logic.
+	totalChunks := uint(math.Floor(float64(fileSize) / float64((2 << 20))))
+
+	wg.Add(int(totalChunks))
+	err = tinychunk.Chunk(data, 2, func(chunkedData []byte) error {
+		defer wg.Done()
+
+		log.Println("Sending chunked data")
+		if err := fileUpload.Send(&pufs_pb.UploadFileStreamRequest{Data: &pufs_pb.UploadFileStreamRequest_FileData{FileData: chunkedData}}); err != nil {
+			log.Printf("Error sending file: %v", err)
+			return err
+		}
+
+		return nil
+	})
+
+	wg.Wait()
+
+	if err != nil {
+		log.Printf("Error chunking and sending data: %v", err)
 		return err
+	}
+
+	resp, err := fileUpload.CloseAndRecv()
+
+	if err != nil {
+		log.Printf("No response from server")
+		return err
+	}
+
+	if resp.GetSucessful() {
+		log.Println("File has been uploaded")
+	} else {
+		return errors.New("Server did not say successful")
 	}
 
 	return nil
 }
 
-func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient) error {
+func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient, ctx context.Context) error {
 	file, err := os.OpenFile(fmt.Sprintf("%v%v", path, fileName), os.O_RDONLY, 0400)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	if err != nil {
 		return err
@@ -141,7 +191,7 @@ func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient) erro
 	//gRPC data size cap at 4MB
 	if fileSize >= (2 << 21) {
 		log.Println("Sending big file")
-		err = uploadFileStream(ctx, client, file, fileSize, fileName)
+		err = uploadFileStream(client, file, fileSize, fileName)
 
 		if err != nil {
 			return err
@@ -166,10 +216,7 @@ func uploadFile(path, fileName string, client pufs_pb.IpfsFileSystemClient) erro
 	return nil
 }
 
-func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient, ctx context.Context) error {
 	resp, err := client.DeleteFile(ctx, &pufs_pb.DeleteFileRequest{FileName: fileName})
 
 	if err != nil {
@@ -185,9 +232,8 @@ func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
 	return nil
 }
 
-func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// We must chunk the file here if its over the 4MB limit.
+func downloadFile(fileName string, client pufs_pb.IpfsFileSystemClient, ctx context.Context) error {
 	log.Printf("Downliading file: %v", fileName)
 
 	fileResp, err := client.DownloadUncappedFile(ctx, &pufs_pb.DownloadFileRequest{FileName: fileName})
@@ -253,13 +299,12 @@ func printFiles(files pufs_pb.IpfsFileSystem_ListFilesClient) {
 }
 
 // Listen for file changes realtime.
-// Client cancellation afte this function exits.
 // Take ID and store this upstream.
 func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Context) {
-    // Call function to remove the client from the subscription when client dies.
-    // Note:  This does NOT run. This would work if the client exited gracefully, however, we do not
-    // This is effectively an endless loop that checks for streams, so the only way to exist is to liste for an os exit event.
-    defer client.UnsubscribeFileStream(ctx, &pufs_pb.FilesRequest{Id: id})
+	// Call function to remove the client from the subscription when client dies.
+	// Note:  This does NOT run. This would work if the client exited gracefully, however, we do not
+	// This is effectively an endless loop that checks for streams, so the only way to exist is to liste for an os exit event.
+	defer client.UnsubscribeFileStream(ctx, &pufs_pb.FilesRequest{Id: id})
 
 	for {
 		stream, err := client.ListFilesEventStream(ctx, &pufs_pb.FilesRequest{Id: id})
@@ -296,11 +341,11 @@ func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Contex
 func main() {
 	flag.Parse()
 
-  // Set client ID
-  rand.Seed(time.Now().UTC().UnixNano())
-  
-  // Allow for up to 100 clients.
-  id = int64(rand.Intn(100))
+	// Set client ID
+	rand.Seed(time.Now().UTC().UnixNano())
+
+	// Allow for up to 100 clients.
+	id = int64(rand.Intn(100))
 
 	conn, err := grpc.Dial(fmt.Sprintf("%v:%v", *serverAddr, *serverPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 
@@ -312,7 +357,6 @@ func main() {
 
 	c := pufs_pb.NewIpfsFileSystemClient(conn)
 	ctx, cancel := context.WithCancel(context.Background())
-
 	defer cancel()
 
 	if len(os.Args) < 2 {
@@ -325,7 +369,7 @@ func main() {
 	switch os.Args[1] {
 
 	case "upload":
-		log.Println("Uploading FIle")
+		log.Println("Uploading File")
 		command.uploadFs.Parse(os.Args[2:])
 
 		if *command.uploadData.path == "" {
@@ -335,8 +379,7 @@ func main() {
 
 		path, fileName := path.Split(*command.uploadData.path)
 
-		//if dir == "" assume "./" ?
-		err = uploadFile(path, fileName, c)
+		err = uploadFile(path, fileName, c, ctx)
 
 		if err != nil {
 			panic("Death thing while uploading")
@@ -346,8 +389,7 @@ func main() {
 		command.downloadFs.Parse(os.Args[2:])
 		log.Println(*command.downloadData.name)
 
-		err = downloadFile(*command.downloadData.name, c)
-
+		err = downloadFile(*command.downloadData.name, c, ctx)
 		if err != nil {
 			panic("Death downloading file")
 		}
@@ -356,7 +398,7 @@ func main() {
 		log.Printf("Deleting File: %v", *command.deleteData.name)
 
 		// Could also delete by IPFS hash
-		err = deleteFile(*command.deleteData.name, c)
+		err = deleteFile(*command.deleteData.name, c, ctx)
 
 		if err != nil {
 			panic("Death while deleting")

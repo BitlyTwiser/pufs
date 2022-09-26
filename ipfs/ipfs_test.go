@@ -1,15 +1,19 @@
 package ipfs_test
 
 import (
-	. "github.com/BitlyTwiser/pufs-server/ipfs"
-	"github.com/stretchr/testify/assert"
+	"log"
 	"os"
 	"testing"
 	"time"
+
+	. "github.com/BitlyTwiser/pufs-server/ipfs"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIPFS(t *testing.T) {
-	file, err := os.ReadFile("../testing/testing_files/test.txt")
+	t.Skip()
+
+	file, err := os.ReadFile("../assets/testing_files/test.txt")
 	assert.Nil(t, err)
 
 	// A localfolder is necessary when creating the IpfsNode element.
@@ -23,7 +27,7 @@ func TestIPFS(t *testing.T) {
 
 	defer cancel()
 
-	ipfsFileHash, err := inode.UploadFileAndPin(&file)
+	ipfsFileHash, err := inode.UploadFileAndPin(file)
 	assert.Nil(t, err)
 
 	t.Logf("File uploaded and pinned. File Hash: %v", ipfsFileHash)
@@ -71,4 +75,34 @@ func TestIPFS(t *testing.T) {
 
 	t.Log("Printing Files hosted on IPFS node after removal")
 	err = inode.ListFilesFromNode()
+}
+
+// Test dumping filesystem
+func TestFileSystemDump(t *testing.T) {
+	fileSystem := IpfsFiles{DataPath: "../assets/backup_files/file-system-data.bin"}
+
+	t.Log("Printing IPFS File system data")
+	fileSystem.Append(&Node{Data: FileData{"test.txt", 0, "ImmaHash", time.Now().Unix()}})
+	fileSystem.Append(&Node{Data: FileData{"anotherTest.txt", 0, "ImmaHash", time.Now().Unix()}})
+
+	err := fileSystem.WriteFileSystemDataToDisk()
+
+	assert.Nil(t, err)
+}
+
+// Test filesystem restore
+func TestFileSystemRestore(t *testing.T) {
+	fileSystem := IpfsFiles{DataPath: "../assets/backup_files/file-system-data.bin"}
+
+	err := fileSystem.LoadFileSystemData()
+
+	assert.Nil(t, err)
+
+	log.Println("File system is not empty after restoration")
+	assert.NotEmpty(t, fileSystem.Files())
+
+	log.Println("Printing File system is after restoration")
+	for _, v := range fileSystem.Files() {
+		log.Println(v.Data.FileName)
+	}
 }
