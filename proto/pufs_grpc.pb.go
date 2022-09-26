@@ -30,6 +30,7 @@ type IpfsFileSystemClient interface {
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
 	ListFilesEventStream(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (IpfsFileSystem_ListFilesEventStreamClient, error)
 	UnsubscribeFileStream(ctx context.Context, in *FilesRequest, opts ...grpc.CallOption) (*UnsubscribeResponse, error)
+	FileSize(ctx context.Context, in *FileSizeRequest, opts ...grpc.CallOption) (*FileSizeResponse, error)
 }
 
 type ipfsFileSystemClient struct {
@@ -206,6 +207,15 @@ func (c *ipfsFileSystemClient) UnsubscribeFileStream(ctx context.Context, in *Fi
 	return out, nil
 }
 
+func (c *ipfsFileSystemClient) FileSize(ctx context.Context, in *FileSizeRequest, opts ...grpc.CallOption) (*FileSizeResponse, error) {
+	out := new(FileSizeResponse)
+	err := c.cc.Invoke(ctx, "/pufs.IpfsFileSystem/FileSize", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IpfsFileSystemServer is the server API for IpfsFileSystem service.
 // All implementations must embed UnimplementedIpfsFileSystemServer
 // for forward compatibility
@@ -218,6 +228,7 @@ type IpfsFileSystemServer interface {
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
 	ListFilesEventStream(*FilesRequest, IpfsFileSystem_ListFilesEventStreamServer) error
 	UnsubscribeFileStream(context.Context, *FilesRequest) (*UnsubscribeResponse, error)
+	FileSize(context.Context, *FileSizeRequest) (*FileSizeResponse, error)
 	mustEmbedUnimplementedIpfsFileSystemServer()
 }
 
@@ -248,6 +259,9 @@ func (UnimplementedIpfsFileSystemServer) ListFilesEventStream(*FilesRequest, Ipf
 }
 func (UnimplementedIpfsFileSystemServer) UnsubscribeFileStream(context.Context, *FilesRequest) (*UnsubscribeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeFileStream not implemented")
+}
+func (UnimplementedIpfsFileSystemServer) FileSize(context.Context, *FileSizeRequest) (*FileSizeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FileSize not implemented")
 }
 func (UnimplementedIpfsFileSystemServer) mustEmbedUnimplementedIpfsFileSystemServer() {}
 
@@ -423,6 +437,24 @@ func _IpfsFileSystem_UnsubscribeFileStream_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IpfsFileSystem_FileSize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FileSizeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IpfsFileSystemServer).FileSize(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pufs.IpfsFileSystem/FileSize",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IpfsFileSystemServer).FileSize(ctx, req.(*FileSizeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IpfsFileSystem_ServiceDesc is the grpc.ServiceDesc for IpfsFileSystem service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -445,6 +477,10 @@ var IpfsFileSystem_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnsubscribeFileStream",
 			Handler:    _IpfsFileSystem_UnsubscribeFileStream_Handler,
+		},
+		{
+			MethodName: "FileSize",
+			Handler:    _IpfsFileSystem_FileSize_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

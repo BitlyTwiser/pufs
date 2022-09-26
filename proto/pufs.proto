@@ -13,6 +13,7 @@ service IpfsFileSystem {
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {};
   rpc ListFilesEventStream(FilesRequest) returns (stream FilesResponse) {};
   rpc UnsubscribeFileStream(FilesRequest) returns (UnsubscribeResponse) {};
+  rpc FileSize(FileSizeRequest) returns (FileSizeResponse) {};
 }
 
 message UploadFileStreamRequest {
@@ -62,10 +63,16 @@ message FilesRequest {
     int64 id = 1;
   }
 
-//Packed?
-// Multiples files
 message FilesResponse {
   File files = 1;
+}
+
+message FileSizeResponse{
+  int64 file_size = 1;
+}
+
+message FileSizeRequest {
+  string file_name = 1;
 }
 
 message File {

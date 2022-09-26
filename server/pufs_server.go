@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net"
 	"os"
 	"sync"
@@ -49,6 +48,22 @@ type fileSubscriber struct {
 
 type fileStream struct {
 	stream pufs_pb.IpfsFileSystem_ListFilesServer
+}
+
+// Used to determine, on the client, to chunk the file download or not.
+func (i *IpfsServer) FileSize(ctx context.Context, in *pufs_pb.FileSizeRequest) (*pufs_pb.FileSizeResponse, error) {
+	logger.Printf("Obtaioning file size for file: %v", in.FileName)
+
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	d := i.fileSystem.FindNodeDataFromName(in.FileName)
+
+	if d == nil {
+		return nil, errors.New(fmt.Sprintf("Error finding file: %v", in.FileName))
+	}
+
+	return &pufs_pb.FileSizeResponse{FileSize: d.FileSize}, nil
 }
 
 // Look at adding in counter to track amount of bytes written. If the length of written bytes > fileSize, grab until the end of bytestream then stop.
@@ -201,37 +216,16 @@ func (i *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_p
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-	var wg sync.WaitGroup
 	logger.Printf("Downloading capped file in chunks..")
-	fileData, err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
 
-	metadata, err := i.getFileMetadata(in.FileName)
+	fileData, err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
 
 	if err != nil {
 		return err
 	}
 
-	//2MB chunks
-	chunkSize := uint(math.Floor(float64(metadata.FileSize) / float64((2 << 20))))
-
-	//Ensure we do not have race condition
-	wg.Add(int(chunkSize))
-	// Send initial request
-	fileMetadata := &pufs_pb.File{
-		Filename:   metadata.FileName,
-		FileSize:   metadata.FileSize,
-		IpfsHash:   metadata.IpfsHash,
-		UploadedAt: timestamppb.New(time.UnixMicro(metadata.UploadedAt)),
-	}
-
-	if err := stream.Send(&pufs_pb.DownloadFileResponseStream{Data: &pufs_pb.DownloadFileResponseStream_FileMetadata{FileMetadata: fileMetadata}}); err != nil {
-		logger.Printf("Error sending initial request for large file download. Error: %v", err)
-		return err
-	}
-
 	tinychunk.Chunk(*fileData.FileData, 2, func(chunkData []byte) error {
-		defer wg.Done()
-
+		logger.Printf("File chunk size: %v", len(chunkData))
 		d := &pufs_pb.DownloadFileResponseStream{
 			Data: &pufs_pb.DownloadFileResponseStream_FileData{FileData: chunkData},
 		}
@@ -243,7 +237,7 @@ func (i *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_p
 		return nil
 	})
 
-	wg.Wait()
+	logger.Println("File downloaded from server")
 
 	return nil
 }

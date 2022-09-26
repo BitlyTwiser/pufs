@@ -235,7 +235,7 @@ func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient, ctx contex
 }
 
 func downloadCappedFile(fileName, path string, client pufs_pb.IpfsFileSystemClient) error {
-	log.Printf("Downloading file: %v", fileName)
+	log.Printf("Downloading larger file: %v", fileName)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -387,6 +387,19 @@ func subscribeFileStream(client pufs_pb.IpfsFileSystemClient, ctx context.Contex
 	}
 }
 
+func chunkFile(fileName string, client pufs_pb.IpfsFileSystemClient) bool {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	size, err := client.FileSize(ctx, &pufs_pb.FileSizeRequest{FileName: fileName})
+
+	if err != nil {
+		log.Printf("Could not get file size. Error: %v", err)
+	}
+
+	return size.FileSize >= (2 << 20)
+}
+
 //Note: These are exmples of using the functions.
 func main() {
 	flag.Parse()
@@ -439,11 +452,17 @@ func main() {
 		log.Println("Downloading File")
 		command.downloadFs.Parse(os.Args[2:])
 
-		err = downloadFile(*command.downloadData.name, *command.downloadData.path, c, ctx)
+		if chunkFile(*command.downloadData.name, c) {
+			err = downloadCappedFile(*command.downloadData.name, *command.downloadData.path, c)
+		} else {
+			err = downloadFile(*command.downloadData.name, *command.downloadData.path, c, ctx)
+		}
+
 		if err != nil {
-      panic(fmt.Sprintf("Death downloading file. Error: %v", err))
+			panic(fmt.Sprintf("Death downloading file. Error: %v", err))
 		}
 	case "download-capped":
+		// Note: Not really to be used, the above method should take priority in usage as it will split depending on filesize.
 		log.Println("Downloading File")
 		command.downloadFs.Parse(os.Args[2:])
 
