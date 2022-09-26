@@ -32,16 +32,16 @@ var (
 )
 
 type Command struct {
-	uploadFs     *flag.FlagSet
-	downloadFs   *flag.FlagSet
-  downloadCappedFs *flag.FlagSet
-	listFs       *flag.FlagSet
-	deleteFs     *flag.FlagSet
-	streamFs     *flag.FlagSet
-	uploadData   uploadData
-	downloadData downloadData
-	deleteData   deleteData
-	command      string
+	uploadFs         *flag.FlagSet
+	downloadFs       *flag.FlagSet
+	downloadCappedFs *flag.FlagSet
+	listFs           *flag.FlagSet
+	deleteFs         *flag.FlagSet
+	streamFs         *flag.FlagSet
+	uploadData       uploadData
+	downloadData     downloadData
+	deleteData       deleteData
+	command          string
 }
 
 type uploadData struct {
@@ -62,12 +62,12 @@ type deleteData struct {
 
 func PufsClient() *Command {
 	c := &Command{
-		uploadFs:   flag.NewFlagSet("upload", flag.ContinueOnError),
-		downloadFs: flag.NewFlagSet("download", flag.ContinueOnError),
+		uploadFs:         flag.NewFlagSet("upload", flag.ContinueOnError),
+		downloadFs:       flag.NewFlagSet("download", flag.ContinueOnError),
 		downloadCappedFs: flag.NewFlagSet("download-capped", flag.ContinueOnError),
-		listFs:     flag.NewFlagSet("list", flag.ContinueOnError),
-		deleteFs:   flag.NewFlagSet("delete", flag.ContinueOnError),
-		streamFs:   flag.NewFlagSet("stream", flag.ContinueOnError),
+		listFs:           flag.NewFlagSet("list", flag.ContinueOnError),
+		deleteFs:         flag.NewFlagSet("delete", flag.ContinueOnError),
+		streamFs:         flag.NewFlagSet("stream", flag.ContinueOnError),
 	}
 
 	// Upload Data
@@ -237,49 +237,49 @@ func deleteFile(fileName string, client pufs_pb.IpfsFileSystemClient, ctx contex
 func downloadCappedFile(fileName, path string, client pufs_pb.IpfsFileSystemClient) error {
 	log.Printf("Downloading file: %v", fileName)
 
-  ctx, cancel := context.WithCancel(context.Background())
-  defer cancel()
-  
-  req := &pufs_pb.DownloadFileRequest{FileName: fileName}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-  download, err := client.DownloadFile(ctx, req)
+	req := &pufs_pb.DownloadFileRequest{FileName: fileName}
 
-  if err != nil {
-    return err
-  }
+	download, err := client.DownloadFile(ctx, req)
 
-  file, err := os.OpenFile(fmt.Sprintf("%v/%v", path, fileName), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
 
-  if err != nil {
-    log.Printf("error opening file to store downloaded data: %v", err)
-  }
+	file, err := os.OpenFile(fmt.Sprintf("%v/%v", path, fileName), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 
-  for {
-    fileChunk, err := download.Recv()
+	if err != nil {
+		log.Printf("error opening file to store downloaded data: %v", err)
+	}
 
-    if err == io.EOF{
-      log.Printf("All data downloaded")
+	for {
+		fileChunk, err := download.Recv()
 
-      break
-    }
+		if err == io.EOF {
+			log.Printf("All data downloaded")
 
-    if err != nil {
-      log.Printf("Error downloading capped file: %v", err)
-      return err
-    }
+			break
+		}
 
-    n, err := file.Write(fileChunk.GetFileData())
+		if err != nil {
+			log.Printf("Error downloading capped file: %v", err)
+			return err
+		}
 
-    if err != nil {
-      return err
-    }
+		n, err := file.Write(fileChunk.GetFileData())
 
-    if n == 0 {
-      return errors.New("No bytes were written to file!")
-    }
-  }
+		if err != nil {
+			return err
+		}
 
-  return nil
+		if n == 0 {
+			return errors.New("No bytes were written to file!")
+		}
+	}
+
+	return nil
 }
 
 // We must chunk the file here if its over the 4MB limit.
@@ -395,7 +395,7 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	// Allow for up to 100 clients.
-  // Allow this to be command line/config item.
+	// Allow this to be command line/config item.
 	id = int64(rand.Intn(100))
 
 	conn, err := grpc.Dial(fmt.Sprintf("%v:%v", *serverAddr, *serverPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -443,13 +443,13 @@ func main() {
 		if err != nil {
 			panic("Death downloading file")
 		}
-  case "download-capped":
+	case "download-capped":
 		log.Println("Downloading File")
 		command.downloadFs.Parse(os.Args[2:])
 
 		err = downloadCappedFile(*command.downloadData.name, *command.downloadData.path, c)
 		if err != nil {
-      panic(fmt.Sprintf("Death downloading file large file! Error: %v", err))
+			panic(fmt.Sprintf("Death downloading file large file! Error: %v", err))
 		}
 	case "delete":
 		command.deleteFs.Parse(os.Args[2:])

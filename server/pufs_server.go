@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"os"
 	"sync"
 	"time"
-  "math"
 
 	"github.com/BitlyTwiser/pufs-server/ipfs"
-	"github.com/BitlyTwiser/tinychunk"
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
+	"github.com/BitlyTwiser/tinychunk"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -120,6 +120,14 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 	// Push message that a file was uploaded in case we have subscribers
 	i.fileSub.eventsChannel <- 1
 
+	// Store data on local disk
+	logger.Println("Saving file to local disk..")
+	err = i.fileSystem.WriteFileSystemDataToDisk()
+
+	if err != nil {
+		return err
+	}
+
 	stream.SendAndClose(&pufs_pb.UploadFileResponse{Sucessful: true})
 
 	return nil
@@ -159,6 +167,14 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 
 	logger.Println("File added to virtual file system")
 
+	// Store data on local disk
+	logger.Println("Saving file to local disk..")
+	err = i.fileSystem.WriteFileSystemDataToDisk()
+
+	if err != nil {
+		return nil, err
+	}
+
 	// Super hack to avoid blocking on file upload when no receivers.
 	if len(i.fileSub.eventsChannel) > 0 {
 		_ = <-i.fileSub.eventsChannel
@@ -173,61 +189,61 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 func (i *IpfsServer) getFileMetadata(fileName string) (*ipfs.FileData, error) {
 	metadata := i.fileSystem.FindNodeDataFromName(fileName)
 
-  if metadata == nil {
-    return nil, errors.New("No file metadata found")
-  }
+	if metadata == nil {
+		return nil, errors.New("No file metadata found")
+	}
 
-  return metadata, nil
+	return metadata, nil
 }
 
 // If over the 4MB cap for grpc, split and chunk into multiple files
 func (i *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_pb.IpfsFileSystem_DownloadFileServer) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
-  
-  var wg sync.WaitGroup
-  logger.Printf("Downloading capped file in chunks..")
+
+	var wg sync.WaitGroup
+	logger.Printf("Downloading capped file in chunks..")
 	fileData, err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
 
-  metadata, err := i.getFileMetadata(in.FileName)
+	metadata, err := i.getFileMetadata(in.FileName)
 
-  if err != nil {
-    return err
-  }
+	if err != nil {
+		return err
+	}
 
-  //2MB chunks
-  chunkSize := uint(math.Floor(float64(metadata.FileSize) / float64((2 << 20))))
-  
-  //Ensure we do not have race condition
-  wg.Add(int(chunkSize)) 
-  // Send initial request 
-  fileMetadata := &pufs_pb.File{
-    Filename: metadata.FileName,
-    FileSize: metadata.FileSize,
-    IpfsHash: metadata.IpfsHash,
-    UploadedAt: timestamppb.New(time.UnixMicro(metadata.UploadedAt)),
-  }
+	//2MB chunks
+	chunkSize := uint(math.Floor(float64(metadata.FileSize) / float64((2 << 20))))
 
-  if err := stream.Send(&pufs_pb.DownloadFileResponseStream{Data: &pufs_pb.DownloadFileResponseStream_FileMetadata{FileMetadata: fileMetadata}}); err != nil {
-    logger.Printf("Error sending initial request for large file download. Error: %v", err)
-    return err
-  }
+	//Ensure we do not have race condition
+	wg.Add(int(chunkSize))
+	// Send initial request
+	fileMetadata := &pufs_pb.File{
+		Filename:   metadata.FileName,
+		FileSize:   metadata.FileSize,
+		IpfsHash:   metadata.IpfsHash,
+		UploadedAt: timestamppb.New(time.UnixMicro(metadata.UploadedAt)),
+	}
 
-  tinychunk.Chunk(*fileData.FileData, 2, func(chunkData []byte) error {
-    defer wg.Done()
+	if err := stream.Send(&pufs_pb.DownloadFileResponseStream{Data: &pufs_pb.DownloadFileResponseStream_FileMetadata{FileMetadata: fileMetadata}}); err != nil {
+		logger.Printf("Error sending initial request for large file download. Error: %v", err)
+		return err
+	}
 
-    d := &pufs_pb.DownloadFileResponseStream{
-      Data: &pufs_pb.DownloadFileResponseStream_FileData{FileData: chunkData},
-    }
+	tinychunk.Chunk(*fileData.FileData, 2, func(chunkData []byte) error {
+		defer wg.Done()
 
-    if err := stream.Send(d); err != nil {
-      return err
-    }
+		d := &pufs_pb.DownloadFileResponseStream{
+			Data: &pufs_pb.DownloadFileResponseStream_FileData{FileData: chunkData},
+		}
 
-    return nil
-  })
+		if err := stream.Send(d); err != nil {
+			return err
+		}
 
-  wg.Wait()
+		return nil
+	})
+
+	wg.Wait()
 
 	return nil
 }
@@ -244,11 +260,11 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 		return nil, err
 	}
 
-  metadata, err := i.getFileMetadata(in.FileName)
+	metadata, err := i.getFileMetadata(in.FileName)
 
-  if err != nil {
-    return nil, err
-  }
+	if err != nil {
+		return nil, err
+	}
 
 	logger.Printf("Downloading File: %v to %v", in.FileName, i.ipfsNode.LocalFolder)
 
@@ -430,7 +446,7 @@ func main() {
 	}
 
 	// Create server
-  // This unbuffered channel is the reason we have to flush the queues elsewhere.
+	// This unbuffered channel is the reason we have to flush the queues elsewhere.
 	eventChannel := make(chan int, 1)
 
 	grpcServer := grpc.NewServer(opts...)
