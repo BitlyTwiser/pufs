@@ -441,7 +441,7 @@ func main() {
 
 		err = downloadFile(*command.downloadData.name, *command.downloadData.path, c, ctx)
 		if err != nil {
-			panic("Death downloading file")
+      panic(fmt.Sprintf("Death downloading file. Error: %v", err))
 		}
 	case "download-capped":
 		log.Println("Downloading File")
