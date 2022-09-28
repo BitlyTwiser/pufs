@@ -446,7 +446,7 @@ func main() {
 		err = uploadFile(path, fileName, c, ctx)
 
 		if err != nil {
-			panic("Death thing while uploading")
+      log.Fatalf("Error occured while uploading file: %v", err)
 		}
 	case "download":
 		log.Println("Downloading File")
@@ -459,7 +459,7 @@ func main() {
 		}
 
 		if err != nil {
-			panic(fmt.Sprintf("Death downloading file. Error: %v", err))
+      log.Fatalf("Error downloading file. Error: %v", err)
 		}
 	case "download-capped":
 		// Note: Not really to be used, the above method should take priority in usage as it will split depending on filesize.
@@ -468,7 +468,7 @@ func main() {
 
 		err = downloadCappedFile(*command.downloadData.name, *command.downloadData.path, c)
 		if err != nil {
-			panic(fmt.Sprintf("Death downloading file large file! Error: %v", err))
+      log.Fatalf("Error downloading large file. Error: %v", err)
 		}
 	case "delete":
 		command.deleteFs.Parse(os.Args[2:])
@@ -478,7 +478,7 @@ func main() {
 		err = deleteFile(*command.deleteData.name, c, ctx)
 
 		if err != nil {
-			panic("Death while deleting")
+      log.Fatalf("An error occured whilst deleting file: %v", err)
 		}
 	case "stream":
 		command.streamFs.Parse(os.Args[2:])
