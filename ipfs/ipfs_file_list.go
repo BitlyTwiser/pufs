@@ -209,6 +209,7 @@ func (f IpfsFiles) WriteFileSystemDataToDisk() error {
 	log.Println("Writing filesystem data to disk.")
 
 	file, err := os.OpenFile(f.DataPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+	defer file.Close()
 
 	if err != nil {
 		return err
@@ -247,7 +248,9 @@ func (f IpfsFiles) WriteFileSystemDataToDisk() error {
 // Reads file system data from disk
 func (f *IpfsFiles) LoadFileSystemData() error {
 	var buffData FileDataSerialized
+
 	file, err := os.OpenFile(f.DataPath, os.O_RDONLY, 0600)
+	defer file.Close()
 
 	if err != nil {
 		return err
