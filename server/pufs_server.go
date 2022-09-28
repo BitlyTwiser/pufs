@@ -15,6 +15,7 @@ import (
 
 	"github.com/BitlyTwiser/pufs-server/ipfs"
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
+	"github.com/BitlyTwiser/tinychunk"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -49,6 +50,23 @@ type fileStream struct {
 	stream pufs_pb.IpfsFileSystem_ListFilesServer
 }
 
+// Used to determine, on the client, to chunk the file download or not.
+func (i *IpfsServer) FileSize(ctx context.Context, in *pufs_pb.FileSizeRequest) (*pufs_pb.FileSizeResponse, error) {
+	logger.Printf("Obtaioning file size for file: %v", in.FileName)
+
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	d := i.fileSystem.FindNodeDataFromName(in.FileName)
+
+	if d == nil {
+		return nil, errors.New(fmt.Sprintf("Error finding file: %v", in.FileName))
+	}
+
+	return &pufs_pb.FileSizeResponse{FileSize: d.FileSize}, nil
+}
+
+// Look at adding in counter to track amount of bytes written. If the length of written bytes > fileSize, grab until the end of bytestream then stop.
 func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileStreamServer) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
@@ -117,6 +135,14 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 	// Push message that a file was uploaded in case we have subscribers
 	i.fileSub.eventsChannel <- 1
 
+	// Store data on local disk
+	logger.Println("Saving file to local disk..")
+	err = i.fileSystem.WriteFileSystemDataToDisk()
+
+	if err != nil {
+		return err
+	}
+
 	stream.SendAndClose(&pufs_pb.UploadFileResponse{Sucessful: true})
 
 	return nil
@@ -156,6 +182,14 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 
 	logger.Println("File added to virtual file system")
 
+	// Store data on local disk
+	logger.Println("Saving file to local disk..")
+	err = i.fileSystem.WriteFileSystemDataToDisk()
+
+	if err != nil {
+		return nil, err
+	}
+
 	// Super hack to avoid blocking on file upload when no receivers.
 	if len(i.fileSub.eventsChannel) > 0 {
 		_ = <-i.fileSub.eventsChannel
@@ -167,11 +201,43 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 	return &pufs_pb.UploadFileResponse{Sucessful: true}, nil
 }
 
+func (i *IpfsServer) getFileMetadata(fileName string) (*ipfs.FileData, error) {
+	metadata := i.fileSystem.FindNodeDataFromName(fileName)
+
+	if metadata == nil {
+		return nil, errors.New("No file metadata found")
+	}
+
+	return metadata, nil
+}
+
 // If over the 4MB cap for grpc, split and chunk into multiple files
-// import chunking package here.
 func (i *IpfsServer) DownloadFile(in *pufs_pb.DownloadFileRequest, stream pufs_pb.IpfsFileSystem_DownloadFileServer) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
+
+	logger.Printf("Downloading capped file in chunks..")
+
+	fileData, err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
+
+	if err != nil {
+		return err
+	}
+
+	tinychunk.Chunk(*fileData.FileData, 2, func(chunkData []byte) error {
+		logger.Printf("File chunk size: %v", len(chunkData))
+		d := &pufs_pb.DownloadFileResponseStream{
+			Data: &pufs_pb.DownloadFileResponseStream_FileData{FileData: chunkData},
+		}
+
+		if err := stream.Send(d); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	logger.Println("File downloaded from server")
 
 	return nil
 }
@@ -181,8 +247,6 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-	logger.Printf("Downloading File: %v to %v", in.FileName, i.ipfsNode.LocalFolder)
-
 	fileData, err := i.ipfsNode.GetFile(in.FileName, i.fileSystem)
 
 	if err != nil {
@@ -190,7 +254,13 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 		return nil, err
 	}
 
-	metadata := i.fileSystem.FindNodeDataFromName(in.FileName)
+	metadata, err := i.getFileMetadata(in.FileName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Printf("Downloading File: %v to %v", in.FileName, i.ipfsNode.LocalFolder)
 
 	logger.Printf("File %v Downloaded", in.FileName)
 	returnMetadata := &pufs_pb.DownloadFileResponse{
@@ -370,8 +440,7 @@ func main() {
 	}
 
 	// Create server
-	// Take note of the potential harm this may do with the buffered channel of 1.
-	// If things break in the future, this may be why.
+	// This unbuffered channel is the reason we have to flush the queues elsewhere.
 	eventChannel := make(chan int, 1)
 
 	grpcServer := grpc.NewServer(opts...)
