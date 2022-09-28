@@ -390,15 +390,16 @@ func (i *IpfsServer) DeleteFile(ctx context.Context, in *pufs_pb.DeleteFileReque
 func loggerFile() *os.File {
 	if _, err := os.Stat(*logPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(*logPath, 0700); err != nil {
-			panic(fmt.Sprintf("Could not create directory: %v", err))
+			fmt.Printf("Could not create directory: %v", err)
+      os.Exit(1)
 		}
 	}
 
 	f, err := os.OpenFile(*logPath+"/"+*logFileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
 
 	if err != nil {
-		fmt.Println(err)
-		panic("Something happened with the logger")
+		fmt.Printf("Something happened with the logger")
+    os.Exit(1)
 	}
 
 	return f
