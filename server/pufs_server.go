@@ -12,6 +12,7 @@ import (
 	"os"
 	"sync"
 	"time"
+  "path"
 
 	"github.com/BitlyTwiser/pufs-server/ipfs"
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
@@ -405,18 +406,31 @@ func loggerFile() *os.File {
 	return f
 }
 
+func createFileSystemDataPath() {
+  dir, _ := path.Split(*fileSystemData)
+
+  if _, err := os.Stat(dir); os.IsNotExist(err) {
+    if err := os.Mkdir(dir, 0777); err != nil {
+      logger.Fatalf("Error creating directory for file system data. Error: %v", err)
+    }
+  }
+}
+
 func main() {
 	flag.Parse()
 
 	// Setup Ipfs node
 	ipfsNode := ipfs.IpfsNode{LocalFolder: "/tmp/"}
+
 	//Setup Ipfs server and return context.
 	cancel := ipfsNode.Init()
-
 	defer cancel()
 
 	// Setup virtual File sytem.
 	fileSystem := ipfs.IpfsFiles{DataPath: *fileSystemData}
+  
+  // Ensure folder for dumping data exists
+  createFileSystemDataPath()
 
 	// If the user desires to delete the filesystem and start anew.
 	if *delFileSystemData {

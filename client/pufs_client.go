@@ -294,7 +294,6 @@ func downloadFile(fileName, path string, client pufs_pb.IpfsFileSystemClient, ct
 
 	fileData, fileMetadata := fileResp.FileData, fileResp.FileMetadata
 
-	fmt.Println(fileData, fileMetadata)
 	log.Println("Downloading file and saving to disk...")
 
 	err = os.WriteFile(fmt.Sprintf("%v/%v", path, fileMetadata.Filename), fileData, 0600)
