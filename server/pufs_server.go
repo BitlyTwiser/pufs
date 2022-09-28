@@ -434,7 +434,7 @@ func main() {
 	var opts []grpc.ServerOption
 	logger.Printf("Server starting, address: localhost:%v\nLogger started: Logging to path: %v", *port, *logPath)
 
-	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%v", *port))
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", *port))
 	if err != nil {
 		logger.Printf("Error starting listener: %v", err)
 	}
