@@ -10,9 +10,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"path"
 	"sync"
 	"time"
-  "path"
 
 	"github.com/BitlyTwiser/pufs-server/ipfs"
 	pufs_pb "github.com/BitlyTwiser/pufs-server/proto"
@@ -383,6 +383,13 @@ func (i *IpfsServer) DeleteFile(ctx context.Context, in *pufs_pb.DeleteFileReque
 
 	logger.Println("File deleted")
 
+	if len(i.fileSub.eventsChannel) > 0 {
+		_ = <-i.fileSub.eventsChannel
+	}
+
+	// Push bool into events channel to force refresh of file clients
+	i.fileSub.eventsChannel <- 1
+
 	response := &pufs_pb.DeleteFileResponse{Successful: true}
 
 	return response, nil
@@ -392,7 +399,7 @@ func loggerFile() *os.File {
 	if _, err := os.Stat(*logPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(*logPath, 0700); err != nil {
 			fmt.Printf("Could not create directory: %v", err)
-      os.Exit(1)
+			os.Exit(1)
 		}
 	}
 
@@ -400,20 +407,20 @@ func loggerFile() *os.File {
 
 	if err != nil {
 		fmt.Printf("Something happened with the logger")
-    os.Exit(1)
+		os.Exit(1)
 	}
 
 	return f
 }
 
 func createFileSystemDataPath() {
-  dir, _ := path.Split(*fileSystemData)
+	dir, _ := path.Split(*fileSystemData)
 
-  if _, err := os.Stat(dir); os.IsNotExist(err) {
-    if err := os.Mkdir(dir, 0777); err != nil {
-      logger.Fatalf("Error creating directory for file system data. Error: %v", err)
-    }
-  }
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.Mkdir(dir, 0777); err != nil {
+			logger.Fatalf("Error creating directory for file system data. Error: %v", err)
+		}
+	}
 }
 
 func main() {
@@ -428,9 +435,9 @@ func main() {
 
 	// Setup virtual File sytem.
 	fileSystem := ipfs.IpfsFiles{DataPath: *fileSystemData}
-  
-  // Ensure folder for dumping data exists
-  createFileSystemDataPath()
+
+	// Ensure folder for dumping data exists
+	createFileSystemDataPath()
 
 	// If the user desires to delete the filesystem and start anew.
 	if *delFileSystemData {
