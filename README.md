@@ -1,8 +1,8 @@
 # pufs
 - Pufs is a distributes file system utilizing IPFS, gRPC, and protocol buffers.
 - The goal is to utilize the server as a primary mechanism to store uplodaed files in memory, allowing the user to stream file system changes to listening clients. The files are stored in a distributed fashion, utilizing IPFS as the backbone to accomplish this.
-- IPFS files are pinned, allowing your stored files to forgo garbage collection:
-- IPFS docs:
+
+# Example usage:
 
 ![Usage](https://pufs-gif-github.s3.us-west-2.amazonaws.com/pufs.gif)
 
@@ -41,3 +41,5 @@ go run ./client/pufs_client.go download -name <file_name> -path /tmp
 - One must have IPFS installed in order to properly utlize the application.
 - The dockerized application installs IPFS within the container.
 - You can follow the [install](https://docs.ipfs.io/install/) docs for IPFS to get IPFS setup locally.
+- IPFS files are pinned, allowing your stored files to forgo IPFS garbage collection.
+[Persistence docs](https://docs.ipfs.tech/concepts/persistence/)
