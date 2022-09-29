@@ -30,6 +30,10 @@ go run ./client/pufs_client.go list
 ```
 go run ./client/pufs_client.go download -name <file_name> -path /tmp
 ```
+- Deleting file:
+```
+go run ./client/pufs_client.go delete -name <file_name>
+```
 
 # Changes distributes to clients in real time:
 - If you utilize the client in stream mode, you will obtain changes to the file system in real time.
