@@ -11,7 +11,6 @@ import (
 )
 
 func TestIPFS(t *testing.T) {
-	t.Skip()
 
 	file, err := os.ReadFile("../assets/testing_files/test.txt")
 	assert.Nil(t, err)
@@ -37,6 +36,10 @@ func TestIPFS(t *testing.T) {
 
 	t.Log("Printing IPFS File system data")
 	fileSystem.Append(&Node{Data: FileData{"test.txt", 0, ipfsFileHash, time.Now().Unix()}})
+
+	t.Logf("Removing Head File From File System: %v", ipfsFileHash)
+	fileSystem.Remove("test.txt")
+
 	fileSystem.Append(&Node{Data: FileData{"anotherTest.txt", 0, ipfsFileHash, time.Now().Unix()}})
 	fileSystem.Append(&Node{Data: FileData{"anotherTestFinal.txt", 0, ipfsFileHash, time.Now().Unix()}})
 
@@ -47,7 +50,7 @@ func TestIPFS(t *testing.T) {
 
 	//The IpfsNode needs an instance of the fileSystem type passed here to access the IpfsList
 	t.Log("Getting File")
-	f, err := inode.GetFile("test.txt", fileSystem)
+	f, err := inode.GetFile("anotherTest.txt", fileSystem)
 
 	//Get File
 	assert.Nil(t, err)
@@ -61,7 +64,7 @@ func TestIPFS(t *testing.T) {
 	//Should remove all matching files
 	t.Logf("Removing File From File System: %v", ipfsFileHash)
 	//Takes in a file name, this will be passed via the client
-	fileSystem.Remove("anotherTest.txt")
+	fileSystem.Remove("anotherTestFinal.txt")
 	t.Log("Listing files again after removal")
 	fileSystem.PrintFileName()
 	t.Logf("Length of File System after removing file: %v", fileSystem.Len())

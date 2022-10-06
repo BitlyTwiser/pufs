@@ -128,6 +128,12 @@ func (f *IpfsFiles) DeleteNode(node *Node) {
 	//Head
 	if node.prev == nil {
 		f.head = node.next
+    if f.head == nil {
+      f.length--
+
+      return 
+    }
+
 		node.next.prev = node.prev
 		node.prev = node.next
 
