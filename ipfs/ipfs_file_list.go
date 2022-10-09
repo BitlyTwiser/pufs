@@ -128,11 +128,11 @@ func (f *IpfsFiles) DeleteNode(node *Node) {
 	//Head
 	if node.prev == nil {
 		f.head = node.next
-    if f.head == nil {
-      f.length--
+		if f.head == nil {
+			f.length--
 
-      return 
-    }
+			return
+		}
 
 		node.next.prev = node.prev
 		node.prev = node.next
@@ -214,11 +214,22 @@ func (f *IpfsFiles) Remove(fileName string) {
 func (f IpfsFiles) WriteFileSystemDataToDisk() error {
 	log.Println("Writing filesystem data to disk.")
 
-	file, err := os.OpenFile(f.DataPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
-	defer file.Close()
+	file, err := os.OpenFile(f.DataPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 
 	if err != nil {
 		return err
+	}
+
+	defer file.Close()
+	// Write empty file.
+	if f.head == nil {
+		_, err = file.WriteAt([]byte{}, 0)
+
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	for f.head != nil {
