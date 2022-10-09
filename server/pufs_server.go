@@ -130,7 +130,7 @@ func (i *IpfsServer) UploadFileStream(stream pufs_pb.IpfsFileSystem_UploadFileSt
 
 	// Super hack to avoid blocking on file upload when no receivers.
 	if len(i.fileSub.eventsChannel) > 0 {
-		_ = <-i.fileSub.eventsChannel
+		<-i.fileSub.eventsChannel
 	}
 
 	// Push message that a file was uploaded in case we have subscribers
@@ -193,7 +193,7 @@ func (i *IpfsServer) UploadFile(ctx context.Context, fileData *pufs_pb.UploadFil
 
 	// Super hack to avoid blocking on file upload when no receivers.
 	if len(i.fileSub.eventsChannel) > 0 {
-		_ = <-i.fileSub.eventsChannel
+		<-i.fileSub.eventsChannel
 	}
 
 	// Push bool into events channel to force refresh of file clients
@@ -376,7 +376,8 @@ func (i *IpfsServer) DeleteFile(ctx context.Context, in *pufs_pb.DeleteFileReque
 
 	if node == nil {
 		logger.Printf("No node with file name: %v was found in filesystem", in.FileName)
-		return nil, errors.New("No file found")
+
+		return nil, errors.New("no file found")
 	} else {
 		i.fileSystem.DeleteNode(node)
 	}
@@ -384,7 +385,14 @@ func (i *IpfsServer) DeleteFile(ctx context.Context, in *pufs_pb.DeleteFileReque
 	logger.Println("File deleted")
 
 	if len(i.fileSub.eventsChannel) > 0 {
-		_ = <-i.fileSub.eventsChannel
+		<-i.fileSub.eventsChannel
+	}
+
+	logger.Println("Writing data to disk")
+	err := i.fileSystem.WriteFileSystemDataToDisk()
+
+	if err != nil {
+		return nil, err
 	}
 
 	// Push bool into events channel to force refresh of file clients
