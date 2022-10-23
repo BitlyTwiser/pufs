@@ -270,7 +270,7 @@ func (i *IpfsServer) DownloadUncappedFile(ctx context.Context, in *pufs_pb.Downl
 			Filename:   in.FileName,
 			FileSize:   metadata.FileSize,
 			IpfsHash:   metadata.IpfsHash,
-			UploadedAt: timestamppb.New(time.UnixMicro(metadata.UploadedAt)),
+			UploadedAt: timestamppb.New(time.Unix(metadata.UploadedAt, 0)),
 		},
 	}
 
@@ -340,7 +340,7 @@ func (i *IpfsServer) sendFiles(stream pufs_pb.IpfsFileSystem_ListFilesServer) er
 			Filename:   f.Data.FileName,
 			FileSize:   f.Data.FileSize,
 			IpfsHash:   f.Data.IpfsHash,
-			UploadedAt: timestamppb.New(time.UnixMicro(f.Data.UploadedAt)),
+			UploadedAt: timestamppb.New(time.Unix(f.Data.UploadedAt, 0)),
 		}})
 
 		if err != nil {

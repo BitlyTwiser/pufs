@@ -47,3 +47,9 @@ go run ./client/pufs_client.go delete -name <file_name>
 - You can follow the [install](https://docs.ipfs.io/install/) docs for IPFS to get IPFS setup locally.
 - IPFS files are pinned, allowing your stored files to forgo IPFS garbage collection.
 [Persistence docs](https://docs.ipfs.tech/concepts/persistence/)
+
+
+# gRPC:
+- To enhance server logging for gRPC (in case of error), one can utilize the environment variables:
+```export GRPC_GO_LOG_VERBOSITY_LEVEL=99```
+```export GRPC_GO_LOG_SEVERITY_LEVEL=info```
